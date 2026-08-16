@@ -1,184 +1,183 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
+import React from 'react';
+import { FaUser, FaCalendarAlt, FaFacebookF, FaInstagram, FaTwitter, FaChevronDown } from 'react-icons/fa';
 
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-}
+export default function DealDetailsPage() {
+  return (
+    <div className="min-h-screen bg-gray-50 text-gray-800 font-sans flex flex-col justify-between">
+      <div>
+        {/* 1. Header Navigation */}
+        <header className="bg-white border-b border-gray-200 py-3 px-8 flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <div className="bg-[#0f6b58] text-white font-bold px-3 py-1 rounded text-xl">V</div>
+            <span className="text-xl font-bold text-gray-900 tracking-tight">VendorHive</span>
+          </div>
 
-.hero {
-  position: relative;
+          <nav className="flex space-x-8 text-sm font-semibold">
+            <a href="#" className="text-gray-600 hover:text-gray-900">Home</a>
+            <a href="#" className="text-gray-600 hover:text-gray-900">Explore Map</a>
+            <a href="#" className="text-[#0f6b58] font-bold border-b-2 border-[#0f6b58] pb-1">Co-op Deals</a>
+            <a href="#" className="text-gray-600 hover:text-gray-900">About Us</a>
+          </nav>
 
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
+          <div className="flex items-center space-x-4 text-sm font-semibold">
+            <a href="#" className="text-gray-700 hover:text-gray-900">Join as Merchant</a>
+            <button className="flex items-center space-x-2 border border-[#0f6b58] text-[#0f6b58] bg-emerald-50/50 px-4 py-2 rounded-lg hover:bg-emerald-100 transition">
+              <FaUser className="text-xs" />
+              <span>My Hive</span>
+            </button>
+          </div>
+        </header>
 
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
+        {/* Main Content Area */}
+        <main className="max-w-6xl mx-auto px-4 py-6">
+          {/* Breadcrumb */}
+          <div className="text-xs text-gray-500 mb-4 flex items-center space-x-2">
+            <span>All Deals</span>
+            <span>&gt;</span>
+            <span>Food & Drink</span>
+            <span>&gt;</span>
+            <span className="text-gray-800 font-medium">Linden Coffee Co.</span>
+          </div>
 
-  .framework,
-  .vite {
-    position: absolute;
-  }
+          {/* Grid Layout (Left Large Image & Info | Right Sidebar Card) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left Column (2 Cols wide) */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Banner Image */}
+              <div className="rounded-2xl overflow-hidden shadow-sm h-[360px] bg-gray-200">
+                <img 
+                  src="https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=1000&q=80" 
+                  alt="Pastry & Coffee" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
 
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
+              {/* About Box */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">About this Cross-Promotion</h3>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  Purchase any coffee flight at Linden Coffee, and we'll immediately credit your VendorHive wallet with a 20% discount coupon for Crust Artisan Bakery. It's our way of helping you get local organic bread to match your premium home roasts.
+                </p>
+              </div>
+            </div>
 
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
-}
+            {/* Right Column (1 Col wide) */}
+            <div className="space-y-4">
+              {/* Deal Card */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex justify-between items-center mb-4">
+                  <span className="bg-amber-100 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-md uppercase">
+                    20% OFF CO-OP DEAL
+                  </span>
+                  <span className="text-xs text-gray-400 font-semibold">Active</span>
+                </div>
 
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
+                <h2 className="text-2xl font-extrabold text-gray-900 mb-6 leading-tight">
+                  Free Pastry with any Espresso Flight
+                </h2>
 
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
-}
+                {/* Participating Merchants */}
+                <div className="space-y-4 border-b border-gray-100 pb-6 mb-6">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                    Participating Merchants
+                  </span>
 
-#next-steps {
-  display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-xs text-gray-600">☕</div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800 leading-none">Linden Coffee Co.</p>
+                      <p className="text-xs text-gray-400 mt-1">Initiating Merchant</p>
+                    </div>
+                  </div>
 
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
+                  <div className="flex items-center space-x-3">
+                    <div className="w-8 h-8 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center font-bold text-xs text-amber-700">🥐</div>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800 leading-none">Crust Artisan Bakery</p>
+                      <p className="text-xs text-gray-400 mt-1">Redemption Partner</p>
+                    </div>
+                  </div>
+                </div>
 
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
+                {/* Date */}
+                <div className="flex items-center space-x-2 text-xs text-gray-600 mb-6">
+                  <FaCalendarAlt className="text-gray-400" />
+                  <span>Valid: Mar 10 - Apr 15, 2026</span>
+                </div>
 
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
-}
+                {/* Action Button */}
+                <button className="w-full bg-[#0f6b58] text-white font-bold py-3 rounded-xl hover:bg-[#0b5243] transition shadow-md">
+                  Save This Deal
+                </button>
+              </div>
 
-#docs {
-  border-right: 1px solid var(--border);
+              {/* Terms Accordion Card */}
+              <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+                <div className="flex justify-between items-center cursor-pointer">
+                  <h4 className="text-sm font-bold text-gray-800">Terms & Conditions</h4>
+                  <FaChevronDown className="text-xs text-gray-400" />
+                </div>
+                <p className="text-xs text-gray-400 mt-3 leading-relaxed">
+                  Coupon codes can only be earned with digital receipt uploads or linked co-op cards. Limit 1 coupon per customer per week. Code expires 30 days after issuance.
+                </p>
+              </div>
+            </div>
 
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
+          </div>
+        </main>
+      </div>
 
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
+      {/* 3. Footer */}
+      <footer className="bg-[#0b1320] text-gray-400 text-xs py-10 px-8 mt-12">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 pb-8 border-b border-gray-800">
+          <div>
+            <div className="flex items-center space-x-2 mb-3">
+              <div className="bg-white text-[#0b1320] font-bold px-2 py-0.5 rounded text-sm">V</div>
+              <span className="text-base font-bold text-white">VendorHive</span>
+            </div>
+            <p className="text-gray-400 leading-relaxed">
+              Connecting local creators, merchants, and neighborhood pioneers in a shared ecosystem that thrives together.
+            </p>
+          </div>
 
-  .logo {
-    height: 18px;
-  }
+          <div>
+            <h5 className="font-bold text-white mb-3">Explore</h5>
+            <ul className="space-y-2">
+              <li><a href="#" className="hover:text-white">Local Directory</a></li>
+              <li><a href="#" className="hover:text-white">Active Deals</a></li>
+              <li><a href="#" className="hover:text-white">Map Search</a></li>
+            </ul>
+          </div>
 
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
+          <div>
+            <h5 className="font-bold text-white mb-3">For Merchants</h5>
+            <ul className="space-y-2">
+              <li><a href="#" className="hover:text-white">Join the Co-op</a></li>
+              <li><a href="#" className="hover:text-white">Merchant Portal</a></li>
+              <li><a href="#" className="hover:text-white">Co-promotion Tool</a></li>
+            </ul>
+          </div>
 
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
+          <div>
+            <h5 className="font-bold text-white mb-3">Collective</h5>
+            <ul className="space-y-2">
+              <li><a href="#" className="hover:text-white">Our Story</a></li>
+              <li><a href="#" className="hover:text-white">Co-op Principles</a></li>
+              <li><a href="#" className="hover:text-white">Impact Report</a></li>
+            </ul>
+          </div>
+        </div>
 
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
-}
-
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
-}
-
-.ticks {
-  position: relative;
-  width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
-
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+        <div className="max-w-6xl mx-auto flex justify-between items-center pt-6">
+          <p>© 2026 VendorHive Collective. All rights reserved.</p>
+          <div className="flex space-x-4">
+            <a href="#" className="hover:text-white"><FaFacebookF /></a>
+            <a href="#" className="hover:text-white"><FaInstagram /></a>
+            <a href="#" className="hover:text-white"><FaTwitter /></a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
 }
