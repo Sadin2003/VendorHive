@@ -11,11 +11,12 @@ export default function Register() {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
-  const { login } = useAuth()
+  const { register } = useAuth()
   const [role, setRole] = useState('customer')
   const [terms, setTerms] = useState(false)
   const [show, setShow] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     name: '',
     business: '',
@@ -28,7 +29,7 @@ export default function Register() {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const from = location.state?.from || '/'
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!terms) {
       setError('Please accept the terms to continue.')
@@ -39,9 +40,34 @@ export default function Register() {
       return
     }
     setError('')
-    login({ name: role === 'merchant' ? form.owner : form.name, email: form.email, role })
-    toast('Account created — welcome to the hive!')
-    navigate(from)
+    setLoading(true)
+    try {
+      const payload =
+        role === 'merchant'
+          ? {
+              role: 'merchant',
+              owner: form.owner,
+              businessName: form.business,
+              name: form.owner,
+              email: form.email,
+              phone: form.phone,
+              password: form.password,
+            }
+          : {
+              role: 'customer',
+              name: form.name,
+              email: form.email,
+              phone: form.phone,
+              password: form.password,
+            }
+      const user = await register(payload)
+      toast(user?.role === 'merchant' ? 'Merchant account created — pending approval!' : 'Account created — welcome to the hive!')
+      navigate(user?.role === 'merchant' ? from : from)
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -112,8 +138,8 @@ export default function Register() {
           I agree to the <a href="#terms" onClick={(e) => e.preventDefault()}>Terms of Service</a> and{' '}
           <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a>.
         </label>
-        <Button type="submit" block size="lg">
-          {role === 'merchant' ? 'Create merchant account' : 'Create account'}
+        <Button type="submit" block size="lg" disabled={loading}>
+          {loading ? 'Creating account…' : role === 'merchant' ? 'Create merchant account' : 'Create account'}
         </Button>
       </form>
       <p className="auth-switch text-center" style={{ marginTop: 20 }}>

@@ -17,20 +17,28 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const from = location.state?.from || '/'
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!email || !password) {
       setError('Please enter both your email and password.')
       return
     }
     setError('')
-    const role = email.includes('admin') ? 'admin' : email.includes('merchant') ? 'merchant' : 'customer'
-    login({ name: email.split('@')[0] || 'Hive member', email, role })
-    toast('Welcome back to the hive!')
-    const home = { admin: '/admin', merchant: '/merchant', customer: '/account' }
-    navigate(role === 'customer' ? from : home[role])
+    setLoading(true)
+    try {
+      const user = await login({ email, password })
+      const role = user.role
+      toast('Welcome back to the hive!')
+      const home = { admin: '/admin', merchant: '/merchant', customer: from || '/account' }
+      navigate(role === 'customer' ? from : home[role])
+    } catch (err) {
+      setError(err.message || 'Login failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -81,8 +89,8 @@ export default function Login() {
             Forgot password?
           </button>
         </div>
-        <Button type="submit" block size="lg">
-          Log in
+        <Button type="submit" block size="lg" disabled={loading}>
+          {loading ? 'Logging in…' : 'Log in'}
         </Button>
       </form>
       <p className="auth-switch text-center" style={{ marginTop: 20 }}>
@@ -92,8 +100,7 @@ export default function Login() {
         </Link>
       </p>
       <p className="hint-role">
-        <strong>Demo tip:</strong> log in with <b>admin@vendorhive.app</b> → admin portal,
-        <b> name@merchant.com</b> → merchant portal, anything else → customer dashboard.
+        <strong>Admin demo:</strong> <b>admin@vendorhive.app</b> / <b>admin1234</b>
       </p>
     </AuthShell>
   )

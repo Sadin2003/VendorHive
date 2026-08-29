@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -6,27 +6,48 @@ import StarRating from '../../components/ui/StarRating'
 import SearchInput from '../../components/ui/SearchInput'
 import { gradientFor } from '../../utils/gradients'
 import { useToast } from '../../components/ui/useToast'
-
-const INITIAL = [
-  { id: 'm1', name: 'Bean & Leaf', cat: 'Cafés', owner: 'Maya Chen', verified: true, rating: 4.8, reports: 0, status: 'live' },
-  { id: 'm2', name: 'Ember & Oak Grill', cat: 'Restaurants', owner: 'Theo Grant', verified: true, rating: 4.6, reports: 1, status: 'live' },
-  { id: 'm3', name: 'Sunflower Bakehouse', cat: 'Bakeries', owner: 'Elena Petrova', verified: true, rating: 4.9, reports: 0, status: 'live' },
-  { id: 'm4', name: 'Petal & Stem', cat: 'Gifts & Local', owner: 'Grace Liu', verified: true, rating: 4.7, reports: 2, status: 'reviewed' },
-  { id: 'm13', name: 'Coal & Clay Ceramics', cat: 'Gifts & Local', owner: 'Ravi Shah', verified: false, rating: null, reports: 0, status: 'pending' },
-  { id: 'm14', name: 'The Hearth Pantry', cat: 'Bakeries', owner: 'Lena Ortiz', verified: false, rating: null, reports: 0, status: 'pending' },
-]
+import { api } from '../../services/api'
 
 export default function BusinessManagement() {
-  const [biz, setBiz] = useState(INITIAL)
+  const [biz, setBiz] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
   const toast = useToast()
 
-  const list = biz.filter((b) => !q.trim() || b.name.toLowerCase().includes(q.trim().toLowerCase()))
-  const live = biz.filter((b) => b.status === 'live').length
+  useEffect(() => {
+    let active = true
+    api.admin
+      .businesses()
+      .then((res) => { if (active) setBiz(res.data || []) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
 
-  const delist = (b) => {
-    setBiz((bs) => bs.map((x) => (x.id === b.id ? { ...x, status: x.status === 'delisted' ? 'live' : 'delisted' } : x)))
-    toast(b.status === 'delisted' ? `${b.name} restored` : `${b.name} delisted`)
+  const list = biz.filter((b) => !q.trim() || b.name.toLowerCase().includes(q.trim().toLowerCase()))
+  const live = biz.filter((b) => b.status !== 'delisted').length
+
+  const delist = async (b) => {
+    const next = b.status === 'delisted' ? 'live' : 'delisted'
+    setBusyId(b.id)
+    try {
+      await api.admin.businessStatus(b.id, next)
+      setBiz((bs) => bs.map((x) => (x.id === b.id ? { ...x, status: next } : x)))
+      toast(next === 'delisted' ? `${b.name} delisted` : `${b.name} restored`)
+    } catch (e) {
+      toast(e.message || 'Action failed')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading businesses…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
   }
 
   return (
@@ -76,7 +97,7 @@ export default function BusinessManagement() {
                 <td>
                   <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
                     <Button to={`/vendors/${b.id}`} variant="ghost" className="btn-icon" title="View public profile"><Icon name="i-eye" size={15} /></Button>
-                    <Button variant="ghost" className="btn-icon" title={b.status === 'delisted' ? 'Restore listing' : 'Delist'} onClick={() => delist(b)}>
+                    <Button variant="ghost" className="btn-icon" title={b.status === 'delisted' ? 'Restore listing' : 'Delist'} disabled={busyId === b.id} onClick={() => delist(b)}>
                       <Icon name="i-flag" size={15} style={{ color: b.status === 'delisted' ? 'var(--primary)' : 'var(--danger)' }} />
                     </Button>
                   </div>

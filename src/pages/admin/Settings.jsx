@@ -1,22 +1,67 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Button from '../../components/ui/Button'
 import Icon from '../../components/ui/Icon'
 import { Field, Input, Toggle } from '../../components/ui/Fields'
 import { useToast } from '../../components/ui/useToast'
+import { api } from '../../services/api'
 
-export default function Settings() {
-  const toast = useToast()
-  const [platform, setPlatform] = useState({ name: 'VendorHive', support: 'support@vendorhive.co' })
-  const [toggles, setToggles] = useState({
+const DEFAULTS = {
+  platformName: 'VendorHive',
+  supportEmail: 'support@vendorhive.co',
+  salesTaxNote: '',
+  flags: {
     openApp: true,
     idCheck: true,
     crossPromos: true,
-    newsletter: false,
     autoVerify: false,
-  })
+    newsletter: false,
+  },
+}
+
+export default function Settings() {
+  const toast = useToast()
+  const [platform, setPlatform] = useState({ name: DEFAULTS.platformName, support: DEFAULTS.supportEmail })
+  const [tax, setTax] = useState(DEFAULTS.salesTaxNote)
+  const [toggles, setToggles] = useState(DEFAULTS.flags)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    api.admin
+      .settings()
+      .then((res) => {
+        if (!active) return
+        const d = res.data || DEFAULTS
+        setPlatform({ name: d.platformName || DEFAULTS.platformName, support: d.supportEmail || DEFAULTS.supportEmail })
+        setTax(d.salesTaxNote || '')
+        setToggles({ ...DEFAULTS.flags, ...(d.flags || {}) })
+      })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
 
   const flip = (k) => () => setToggles((t) => ({ ...t, [k]: !t[k] }))
   const set = (k) => (e) => setPlatform((p) => ({ ...p, [k]: e.target.value }))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.admin.updateSettings({
+        platformName: platform.name,
+        supportEmail: platform.support,
+        salesTaxNote: tax,
+        flags: toggles,
+      })
+      toast('Settings saved')
+    } catch (e) {
+      toast(e.message || 'Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const toggleRow = (k, title, desc) => (
     <div className="row-between" style={{ padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
@@ -28,6 +73,13 @@ export default function Settings() {
     </div>
   )
 
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading settings…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
+  }
+
   return (
     <div>
       <div className="section-head">
@@ -35,7 +87,7 @@ export default function Settings() {
           <h1 style={{ fontSize: '1.6rem' }}>Settings</h1>
           <p>Platform-wide preferences for the community.</p>
         </div>
-        <Button variant="primary" onClick={() => toast('Settings saved')}>Save changes</Button>
+        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
       </div>
 
       <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, alignItems: 'start' }}>
@@ -48,7 +100,7 @@ export default function Settings() {
             <Input value={platform.support} onChange={set('support')} />
           </Field>
           <Field label="Sales tax note">
-            <Input placeholder="e.g. 6.25% Hive City tax, applied at checkout" />
+            <Input placeholder="e.g. 6.25% Hive City tax, applied at checkout" value={tax} onChange={(e) => setTax(e.target.value)} />
           </Field>
         </div>
 

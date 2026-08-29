@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { AuthContext } from './authContext'
+import { api } from '../services/api'
 
 const STORAGE_KEY = 'vh_user'
 
@@ -14,18 +15,60 @@ function readStored() {
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(readStored)
+  const [initializing, setInitializing] = useState(true)
 
-  useEffect(() => {
+  const persist = (u) => {
+    setUser(u)
     try {
-      if (user) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
+      if (u) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(u))
       else window.localStorage.removeItem(STORAGE_KEY)
     } catch {
       // ignore storage errors
     }
-  }, [user])
+  }
 
-  const login = (u) => setUser(u)
-  const logout = () => setUser(null)
+  useEffect(() => {
+    let active = true
+    api.auth
+      .me()
+      .then((res) => {
+        if (active) persist(res.user)
+      })
+      .catch(() => {
+        if (active) persist(null)
+      })
+      .finally(() => {
+        if (active) setInitializing(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>
+  const login = useCallback(async (payload) => {
+    const res = await api.auth.login(payload)
+    persist(res.user)
+    return res.user
+  }, [])
+
+  const register = useCallback(async (payload) => {
+    const res = await api.auth.register(payload)
+    persist(res.user)
+    return res.user
+  }, [])
+
+  const logout = useCallback(async () => {
+    try {
+      await api.auth.logout()
+    } catch {
+      // ignore network errors on logout
+    }
+    persist(null)
+  }, [])
+
+  return (
+    <AuthContext.Provider value={{ user, initializing, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }

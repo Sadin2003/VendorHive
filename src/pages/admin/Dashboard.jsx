@@ -1,32 +1,17 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import { api } from '../../services/api'
 
-const STATS = [
-  { icon: 'i-users', tone: 'green', label: 'Members', value: '14,382', delta: '+206 this week' },
-  { icon: 'i-store', tone: 'cyan', label: 'Businesses', value: '1,208', delta: '+31 this month' },
-  { icon: 'i-shield', tone: 'amber', label: 'Pending verification', value: '4', delta: '2 over 72h' },
-  { icon: 'i-tag', tone: 'red', label: 'Flagged reviews', value: '3', delta: '1 escalated' },
-]
+const EMPTY = { members: 0, businesses: 0, pendingVerification: 0, flaggedReviews: 0, weeklySignups: [], monthlyActive: [], recentPending: [], recentFlagged: [] }
 
-const BARS = [42, 68, 55, 74, 88, 61, 96, 78, 112, 90, 104]
-const LINE = [30, 46, 38, 62, 55, 74, 68, 92, 84, 110, 98, 126]
-const LMAX = 140
-
-const PENDING = [
-  { name: 'Coal & Clay Ceramics', owner: 'Ravi Shah', cat: 'Gifts & Local', wait: '28h', r: '100%' },
-  { name: 'The Hearth Pantry', owner: 'Lena Ortiz', cat: 'Bakeries', wait: '74h', r: '92%' },
-]
-
-const FLAGGED = [
-  { user: 'J. Rivera', business: 'The Copper Studio', reason: 'Hate speech', risk: 'high' },
-  { user: 'T. Novak', business: 'Petal & Stem', reason: 'Suspected self-review', risk: 'med' },
-]
-
-export function AdminAreaChart() {
+export function AdminAreaChart({ data = [], lmax } = {}) {
+  const LINE = data.length ? data : [30, 46, 38, 62, 55, 74, 68, 92, 84, 110, 98, 126]
+  const LMAX = lmax || 140
   const w = 460, h = 130
   const points = LINE.map((v, i) => `${(i / (LINE.length - 1)) * (w - 10) + 5},${h - (v / LMAX) * h + 4}`).join(' ')
   const last = LINE[LINE.length - 1]
@@ -48,7 +33,8 @@ export function AdminAreaChart() {
   )
 }
 
-export function AdminBarChart() {
+export function AdminBarChart({ data = [] } = {}) {
+  const BARS = data.length ? data : [42, 68, 55, 74, 88, 61, 96, 78, 112, 90, 104]
   const max = Math.max(...BARS)
   const w = 460, h = 120, bw = (w - 40) / BARS.length
   return (
@@ -66,12 +52,42 @@ export function AdminBarChart() {
 }
 
 export default function AdminDashboard() {
+  const [stats, setStats] = useState(EMPTY)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    api.admin
+      .stats()
+      .then((res) => { if (active) setStats(res.data || EMPTY) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const lineMax = Math.max(140, ...(stats.monthlyActive || []))
+
+  const STATS = [
+    { icon: 'i-users', tone: 'green', label: 'Members', value: (stats.members || 0).toLocaleString(), delta: 'Registered members' },
+    { icon: 'i-store', tone: 'cyan', label: 'Businesses', value: (stats.businesses || 0).toLocaleString(), delta: 'Total listings' },
+    { icon: 'i-shield', tone: 'amber', label: 'Pending verification', value: (stats.pendingVerification || 0).toString(), delta: 'Awaiting review' },
+    { icon: 'i-tag', tone: 'red', label: 'Flagged reviews', value: (stats.flaggedReviews || 0).toString(), delta: 'In queue' },
+  ]
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading dashboard…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load dashboard: {error}</div>
+  }
+
   return (
     <div>
       <div className="section-head">
         <div>
           <h1 style={{ fontSize: '1.6rem' }}>Community pulse</h1>
-          <p>Hive City is growing — 88 new members joined this week.</p>
+          <p>Live overview of the VendorHive community.</p>
         </div>
         <Button to="/admin/analytics" variant="outline"><Icon name="i-chart" size={15} /> Full analytics</Button>
       </div>
@@ -86,18 +102,18 @@ export default function AdminDashboard() {
         <div className="card card-pad">
           <div className="row-between" style={{ marginBottom: 4 }}>
             <h4 style={{ margin: 0 }}>Active members</h4>
-            <span className="badge badge-green">+31% YoY</span>
+            <span className="badge badge-green">Live</span>
           </div>
           <p className="small muted">Monthly active members · last 12 months</p>
-          <AdminAreaChart />
+          <AdminAreaChart data={stats.monthlyActive} lmax={lineMax} />
         </div>
         <div className="card card-pad">
           <div className="row-between" style={{ marginBottom: 4 }}>
             <h4 style={{ margin: 0 }}>Weekly signups</h4>
-            <span className="badge badge-gray">11 weeks</span>
+            <span className="badge badge-gray">7 days</span>
           </div>
-          <p className="small muted">New members who joined via a merchant referral</p>
-          <AdminBarChart />
+          <p className="small muted">New members joined this week</p>
+          <AdminBarChart data={stats.weeklySignups} />
         </div>
       </div>
 
@@ -107,14 +123,16 @@ export default function AdminDashboard() {
             <h4 style={{ margin: 0, fontSize: '1rem' }}>Verification queue</h4>
             <Link to="/admin/verification" className="section-link">Review all →</Link>
           </div>
-          {PENDING.map((m) => (
-            <div key={m.name} className="row" style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+          {stats.recentPending.length === 0 ? (
+            <p className="muted small" style={{ padding: '16px 20px' }}>No pending applications.</p>
+          ) : stats.recentPending.map((m) => (
+            <div key={m.id} className="row" style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
               <div className="grow">
                 <div className="bold small">{m.name}</div>
                 <span className="tiny muted">{m.owner} · {m.cat}</span>
               </div>
               <div className="col" style={{ alignItems: 'flex-end', gap: 2 }}>
-                <Badge tone={m.wait.includes('74') ? 'red' : 'amber'}>{m.wait}</Badge>
+                <Badge tone={m.wait && m.wait.includes('d ') ? 'red' : 'amber'}>{m.wait}</Badge>
                 <span className="tiny muted">docs {m.r}</span>
               </div>
             </div>
@@ -129,8 +147,10 @@ export default function AdminDashboard() {
             <h4 style={{ margin: 0, fontSize: '1rem' }}>Moderation queue</h4>
             <Link to="/admin/reviews" className="section-link">Approve / flag →</Link>
           </div>
-          {FLAGGED.map((f, i) => (
-            <div key={i} className="row" style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+          {stats.recentFlagged.length === 0 ? (
+            <p className="muted small" style={{ padding: '16px 20px' }}>No flagged reviews.</p>
+          ) : stats.recentFlagged.map((f) => (
+            <div key={f.id} className="row" style={{ padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
               <Avatar text={f.user} size="sm" />
               <div className="grow">
                 <div className="bold small">{f.business}</div>

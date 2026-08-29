@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -6,28 +6,59 @@ import Avatar from '../../components/ui/Avatar'
 import StarRating from '../../components/ui/StarRating'
 import Tabs from '../../components/ui/Tabs'
 import { useToast } from '../../components/ui/useToast'
+import { api } from '../../services/api'
 
-const INITIAL = [
-  { id: 'rv1', business: 'The Copper Studio', user: 'J. Rivera', rating: 1, date: '2 h ago', reason: 'Hate speech', risk: 'high', text: 'Worst place in town, and the owner is a total <redacted>.' },
-  { id: 'rv2', business: 'Petal & Stem', user: 'T. Novak', rating: 5, date: '1 day ago', reason: 'Suspected self-review', risk: 'med', text: 'Absolutely divine arrangements. 10/10 would recommend to my own mom.' },
-  { id: 'rv3', business: 'Ember & Oak Grill', user: 'K. Wren', rating: 2, date: '6 h ago', reason: 'Off-topic (political)', risk: 'med', text: 'Great ribs but honestly the city council should — see below for my full opinion.' },
-]
+function timeAgo(iso) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `${Math.max(1, mins)} m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days} d ago`
+}
 
 export default function ReviewModeration() {
   const toast = useToast()
-  const [reviews, setReviews] = useState(INITIAL)
+  const [reviews, setReviews] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
   const [tab, setTab] = useState('queue')
 
-  const resolve = (id, action) => {
-    if (action === 'remove') {
-      setReviews((rs) => rs.filter((r) => r.id !== id))
-      toast('Review removed')
-    } else if (action === 'restore') {
-      setReviews((rs) => rs.filter((r) => r.id !== id))
-      toast('Review kept — flag cleared, feedback logged')
-    } else {
-      toast('Escalated to human review')
+  useEffect(() => {
+    let active = true
+    api.admin
+      .reviews('pending')
+      .then((res) => { if (active) setReviews(res.data || []) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const resolve = async (id, action) => {
+    setBusyId(id)
+    try {
+      await api.admin.reviewAction(id, action)
+      if (action === 'escalate') {
+        toast('Escalated to human review')
+      } else {
+        setReviews((rs) => rs.filter((r) => r.id !== id))
+        toast(action === 'remove' ? 'Review removed' : 'Review kept — flag cleared, feedback logged')
+      }
+    } catch (e) {
+      toast(e.message || 'Action failed')
+    } finally {
+      setBusyId(null)
     }
+  }
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading reviews…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
   }
 
   return (
@@ -69,7 +100,7 @@ export default function ReviewModeration() {
                       <div className="bold small">{r.user} <StarRating value={r.rating} size={12} style={{ verticalAlign: '1px' }} /></div>
                     </div>
                   </div>
-                  <span className="tiny muted">{r.date}</span>
+                  <span className="tiny muted">{timeAgo(r.date)}</span>
                 </div>
                 <p style={{ margin: '0 0 12px' }}>{r.text}</p>
                 <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -77,9 +108,9 @@ export default function ReviewModeration() {
                     <Icon name={r.risk === 'high' ? 'i-flag' : 'i-alert'} size={12} /> {r.risk} · {r.reason}
                   </Badge>
                   <span className="grow" />
-                  <Button variant="ghost" size="sm" onClick={() => resolve(r.id, 'remove')}><Icon name="i-trash" size={14} /> Remove</Button>
-                  <Button variant="outline" size="sm" onClick={() => resolve(r.id, 'restore')}><Icon name="i-check" size={14} /> Keep</Button>
-                  <Button variant="ghost" size="sm" onClick={() => resolve(r.id, 'escalate')}><Icon name="i-shield" size={14} /> Escalate</Button>
+                  <Button variant="ghost" size="sm" disabled={busyId === r.id} onClick={() => resolve(r.id, 'remove')}><Icon name="i-trash" size={14} /> Remove</Button>
+                  <Button variant="outline" size="sm" disabled={busyId === r.id} onClick={() => resolve(r.id, 'restore')}><Icon name="i-check" size={14} /> Keep</Button>
+                  <Button variant="ghost" size="sm" disabled={busyId === r.id} onClick={() => resolve(r.id, 'escalate')}><Icon name="i-shield" size={14} /> Escalate</Button>
                 </div>
               </div>
             ))

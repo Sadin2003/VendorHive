@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
@@ -7,35 +7,57 @@ import Modal from '../../components/ui/Modal'
 import { Field, Select, Textarea } from '../../components/ui/Fields'
 import { gradientFor } from '../../utils/gradients'
 import { useToast } from '../../components/ui/useToast'
-
-const QUEUE = [
-  { id: 'm13', name: 'Coal & Clay Ceramics', owner: 'Ravi Shah', cat: 'Gifts & Local', addr: '19 Kiln Lane', waited: '28h', docs: '100%', note: 'Studio pottery with a storefront.' },
-  { id: 'm14', name: 'The Hearth Pantry', owner: 'Lena Ortiz', cat: 'Bakeries', addr: '2 Oven Street', waited: '74h', docs: '92%', note: 'Bakery/deli, seasonal menu.' },
-  { id: 'm15', name: 'Redline Bicycles', owner: 'Jon Mercer', cat: 'Services', addr: '31 Spoke Road', waited: '11h', docs: '100%', note: 'Repairs + rentals.' },
-  { id: 'm16', name: 'Glow & Groom Studio', owner: 'Nadia Bhuiyan', cat: 'Health & Beauty', addr: '9 Amber Walk', waited: '5h', docs: '58%', note: 'Missing business license upload.' },
-]
+import { api } from '../../services/api'
 
 export default function MerchantVerification() {
   const toast = useToast()
-  const [queue, setQueue] = useState(QUEUE)
+  const [queue, setQueue] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const [active, setActive] = useState(null)
   const [decision, setDecision] = useState('approved')
   const [reason, setReason] = useState('')
 
-  const decide = () => {
-    // only reject needs a reason
+  useEffect(() => {
+    let active = true
+    api.admin
+      .verification()
+      .then((res) => { if (active) setQueue(res.data || []) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const decide = async () => {
     if (decision === 'rejected' && !reason.trim()) {
-      toast("Please add a reason so they know what to fix")
+      toast('Please add a reason so they know what to fix')
       return
     }
-    if (decision === 'approved' && queue.length > 1) {
-      toast(`${active.name} verified — they can post deals!`)
-    } else {
-      toast(decision === 'approved' ? 'Merchant verified' : 'Application rejected')
+    setBusy(true)
+    try {
+      if (decision === 'approved') {
+        await api.admin.approveVerification(active.id)
+        toast(`${active.name} verified — they can post deals!`)
+      } else {
+        await api.admin.rejectVerification(active.id, reason.trim())
+        toast('Application rejected')
+      }
+      setQueue((q) => q.filter((x) => x.id !== active.id))
+      setActive(null)
+      setReason('')
+    } catch (e) {
+      toast(e.message || 'Action failed')
+    } finally {
+      setBusy(false)
     }
-    setQueue((q) => q.filter((x) => x.id !== active.id))
-    setActive(null)
-    setReason('')
+  }
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading verification queue…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
   }
 
   return (
@@ -69,11 +91,11 @@ export default function MerchantVerification() {
                   </div>
                 </div>
                 <div className="row" style={{ gap: 10 }}>
-                  <Badge tone={m.waited.includes('74') ? 'red' : 'amber'}>{m.waited}</Badge>
+                  <Badge tone={String(m.waited || '').includes('d ') ? 'red' : 'amber'}>{m.waited}</Badge>
                   <Badge tone={m.docs === '100%' ? 'green' : 'gray'}>docs {m.docs}</Badge>
                 </div>
               </div>
-              <p className="small muted" style={{ margin: '12px 0' }}>“{m.note}” — application notes from the owner.</p>
+              {m.note && <p className="small muted" style={{ margin: '12px 0' }}>“{m.note}” — application notes from the owner.</p>}
               <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
                 <span className="badge badge-gray"><Icon name="i-file" size={12} /> Licenses ×2</span>
                 <span className="badge badge-gray"><Icon name="i-camera" size={12} /> Interior photos ×4</span>
@@ -112,8 +134,8 @@ export default function MerchantVerification() {
         )}
         <div className="row" style={{ justifyContent: 'flex-end', gap: 10 }}>
           <Button variant="ghost" onClick={() => setActive(null)}>Cancel</Button>
-          <Button variant={decision === 'approved' ? 'primary' : 'danger'} onClick={decide}>
-            {decision === 'approved' ? 'Confirm approval' : 'Reject application'}
+          <Button variant={decision === 'approved' ? 'primary' : 'danger'} onClick={decide} disabled={busy}>
+            {busy ? 'Saving…' : decision === 'approved' ? 'Confirm approval' : 'Reject application'}
           </Button>
         </div>
       </Modal>
