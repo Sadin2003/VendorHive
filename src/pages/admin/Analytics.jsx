@@ -1,22 +1,59 @@
+import { useEffect, useState } from 'react'
 import StatCard from '../../components/ui/StatCard'
 import { AdminAreaChart, AdminBarChart } from './Dashboard'
+import { api, csvUrl } from '../../services/api'
 
-const KPIS = [
-  { icon: 'i-eye', tone: 'green', label: 'Total profile views', value: '1.28M', delta: '+24% this quarter' },
-  { icon: 'i-bookmark-o', tone: 'amber', label: 'Deal redemptions', value: '86,204', delta: '+9% this month' },
-  { icon: 'i-users', tone: 'cyan', label: 'Active trippers', value: '6,120', delta: '+412 this week' },
-  { icon: 'i-chart', tone: 'red', label: 'Avg. deal value', value: '$11.42', delta: '+$0.68' },
-]
+const FALLBACK = {
+  kpis: [
+    { label: 'Total profile views', value: '1.28M', delta: '+24% this quarter' },
+    { label: 'Deal redemptions', value: '86,204', delta: '+9% this month' },
+    { label: 'Active trippers', value: '6,120', delta: '+412 this week' },
+    { label: 'Avg. deal value', value: '$11.42', delta: '+$0.68' },
+  ],
+  monthlyActive: [],
+  weeklySignups: [],
+  cats: [],
+}
 
-const CATS = [
-  { c: 'Cafés', deals: 214, saves: 38120, pct: 100 },
-  { c: 'Bakeries', deals: 168, saves: 27410, pct: 74 },
-  { c: 'Restaurants', deals: 155, saves: 22150, pct: 41 },
-  { c: 'Health & Beauty', deals: 121, saves: 16080, pct: 30 },
-  { c: 'Gifts & Local', deals: 98, saves: 12750, pct: 22 },
+const KPI_META = [
+  { icon: 'i-eye', tone: 'green' },
+  { icon: 'i-bookmark-o', tone: 'amber' },
+  { icon: 'i-users', tone: 'cyan' },
+  { icon: 'i-chart', tone: 'red' },
 ]
 
 export default function Analytics() {
+  const [data, setData] = useState(FALLBACK)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    api.admin
+      .analytics()
+      .then((res) => { if (active) setData(res.data || FALLBACK) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const kpis = (data.kpis && data.kpis.length ? data.kpis : FALLBACK.kpis).map((k, i) => ({
+    ...k,
+    icon: (KPI_META[i] || {}).icon,
+    tone: (KPI_META[i] || {}).tone,
+  }))
+
+  const exportCsv = () => {
+    window.open(csvUrl('/admin/analytics/export'), '_blank')
+  }
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading analytics…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
+  }
+
   return (
     <div>
       <div className="section-head">
@@ -25,13 +62,13 @@ export default function Analytics() {
           <p>Platform-wide health, from signups to saves.</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <span className="badge badge-gray">Last 12 months</span>
-          <button type="button" className="btn btn-outline btn-sm">Export CSV</button>
+          <span className="badge badge-gray">Live</span>
+          <button type="button" className="btn btn-outline btn-sm" onClick={exportCsv}>Export CSV</button>
         </div>
       </div>
 
       <div className="grid grid-4">
-        {KPIS.map((s) => (
+        {kpis.map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
       </div>
@@ -40,18 +77,18 @@ export default function Analytics() {
         <div className="card card-pad">
           <h4 style={{ margin: '0 0 4px' }}>Member growth</h4>
           <p className="small muted" style={{ margin: 0 }}>Active monthly members</p>
-          <AdminAreaChart />
+          <AdminAreaChart data={data.monthlyActive} />
         </div>
         <div className="card card-pad">
           <h4 style={{ margin: '0 0 4px' }}>New member signups</h4>
           <p className="small muted" style={{ margin: 0 }}>Weekly new accounts</p>
-          <AdminBarChart />
+          <AdminBarChart data={data.weeklySignups} />
         </div>
       </div>
 
       <div className="card card-pad" style={{ marginTop: 20 }}>
         <h4 style={{ margin: '0 0 16px' }}>Top categories by deal saves</h4>
-        {CATS.map((r) => (
+        {data.cats.map((r) => (
           <div key={r.c} className="row" style={{ gap: 12, padding: '6px 0' }}>
             <span className="small bold" style={{ width: 160 }}>{r.c}</span>
             <div className="progress grow"><i style={{ width: `${r.pct}%` }} /></div>

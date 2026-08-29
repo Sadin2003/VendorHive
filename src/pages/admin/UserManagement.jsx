@@ -1,29 +1,33 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import SearchInput from '../../components/ui/SearchInput'
 import { useToast } from '../../components/ui/useToast'
-
-const INITIAL = [
-  { id: '1', name: 'Aisha Khan', email: 'aisha@example.com', role: 'shopper', joined: 'Jan 2026', status: 'active', deals: 22 },
-  { id: '2', name: 'Marcus Taylor', email: 'marcus@example.com', role: 'shopper', joined: 'Jan 2026', status: 'active', deals: 9 },
-  { id: '3', name: 'Maya Chen', email: 'owner@beanandleaf.co', role: 'merchant', joined: 'Feb 2026', status: 'active', deals: 6 },
-  { id: '4', name: 'Ravi Shah', email: 'ravi@coalclay.co', role: 'merchant', joined: 'Aug 2026', status: 'pending', deals: 0 },
-  { id: '5', name: 'Priya Nair', email: 'priya@example.com', role: 'shopper', joined: 'Mar 2026', status: 'suspended', deals: 4 },
-  { id: '6', name: 'Tomás Rivera', email: 'tomas@example.com', role: 'shopper', joined: 'Apr 2026', status: 'active', deals: 2 },
-]
+import { api } from '../../services/api'
 
 const ROLE = { shopper: 'gray', merchant: 'green', admin: 'amber' }
-
 const FILTERS = ['All', 'Shoppers', 'Merchants', 'Pending', 'Suspended']
 
 export default function UserManagement() {
-  const [users, setUsers] = useState(INITIAL)
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('All')
   const toast = useToast()
+
+  useEffect(() => {
+    let active = true
+    api.admin
+      .users()
+      .then((res) => { if (active) setUsers(res.data || []) })
+      .catch((e) => { if (active) setError(e.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
 
   const list = useMemo(() => {
     const t = q.trim().toLowerCase()
@@ -37,10 +41,25 @@ export default function UserManagement() {
     })
   }, [users, q, filter])
 
-  const toggle = (u) => {
+  const toggle = async (u) => {
     const next = u.status === 'suspended' ? 'active' : 'suspended'
-    setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: next } : x)))
-    toast(next === 'suspended' ? `${u.name} suspended` : `${u.name} restored`)
+    setBusyId(u.id)
+    try {
+      await api.admin.userStatus(u.id, next)
+      setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: next } : x)))
+      toast(next === 'suspended' ? `${u.name} suspended` : `${u.name} restored`)
+    } catch (e) {
+      toast(e.message || 'Action failed')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (loading) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading users…</div>
+  }
+  if (error) {
+    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
   }
 
   return (
@@ -48,7 +67,7 @@ export default function UserManagement() {
       <div className="section-head">
         <div>
           <h1 style={{ fontSize: '1.6rem' }}>User management</h1>
-          <p>{users.length} members · 2 new this week</p>
+          <p>{users.length} members · sourced live from the database</p>
         </div>
         <span className="badge badge-green"><Icon name="i-check-circle" size={13} /> System healthy</span>
       </div>
@@ -88,7 +107,7 @@ export default function UserManagement() {
                     </div>
                   </div>
                 </td>
-                <td><Badge tone={ROLE[u.role]}>{u.role}</Badge></td>
+                <td><Badge tone={ROLE[u.role] || 'gray'}>{u.role}</Badge></td>
                 <td>
                   <Badge tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'red'}>{u.status}</Badge>
                 </td>
@@ -102,6 +121,7 @@ export default function UserManagement() {
                         variant="ghost"
                         className="btn-icon"
                         title={u.status === 'suspended' ? 'Restore' : 'Suspend'}
+                        disabled={busyId === u.id}
                         onClick={() => toggle(u)}
                       >
                         <Icon name={u.status === 'suspended' ? 'i-refresh' : 'i-user'} size={15} style={{ color: u.status === 'suspended' ? 'var(--primary)' : 'var(--danger)' }} />
