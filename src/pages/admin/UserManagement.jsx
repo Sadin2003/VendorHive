@@ -1,37 +1,29 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import SearchInput from '../../components/ui/SearchInput'
-import { useToast } from '../../components/ui/useToast'
+import { PageLoading, PageError } from '../../components/ui/Loading'
 import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
+import { useToast } from '../../components/ui/useToast'
 
 const ROLE = { shopper: 'gray', merchant: 'green', admin: 'amber' }
+
 const FILTERS = ['All', 'Shoppers', 'Merchants', 'Pending', 'Suspended']
 
 export default function UserManagement() {
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('All')
+  const [busyId, setBusyId] = useState(null)
   const toast = useToast()
-
-  useEffect(() => {
-    let active = true
-    api.admin
-      .users()
-      .then((res) => { if (active) setUsers(res.data || []) })
-      .catch((e) => { if (active) setError(e.message) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
+  const { data, loading, error, refetch } = useApi(() => api.admin.users(), [], [])
+  const users = data || []
 
   const list = useMemo(() => {
     const t = q.trim().toLowerCase()
-    return users.filter((u) => {
+    return (data || []).filter((u) => {
       if (filter === 'Shoppers' && u.role !== 'shopper') return false
       if (filter === 'Merchants' && u.role !== 'merchant') return false
       if (filter === 'Pending' && u.status !== 'pending') return false
@@ -39,35 +31,31 @@ export default function UserManagement() {
       if (t && !`${u.name} ${u.email}`.toLowerCase().includes(t)) return false
       return true
     })
-  }, [users, q, filter])
+  }, [data, q, filter])
 
   const toggle = async (u) => {
     const next = u.status === 'suspended' ? 'active' : 'suspended'
     setBusyId(u.id)
     try {
       await api.admin.userStatus(u.id, next)
-      setUsers((us) => us.map((x) => (x.id === u.id ? { ...x, status: next } : x)))
       toast(next === 'suspended' ? `${u.name} suspended` : `${u.name} restored`)
-    } catch (e) {
-      toast(e.message || 'Action failed')
+      refetch()
+    } catch (err) {
+      toast(err.message || 'Could not change status')
     } finally {
       setBusyId(null)
     }
   }
 
-  if (loading) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading users…</div>
-  }
-  if (error) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
-  }
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading members…" /></div>
+  if (error) return <PageError text="Could not load users." />
 
   return (
     <div>
       <div className="section-head">
         <div>
           <h1 style={{ fontSize: '1.6rem' }}>User management</h1>
-          <p>{users.length} members · sourced live from the database</p>
+          <p>{users.length} members</p>
         </div>
         <span className="badge badge-green"><Icon name="i-check-circle" size={13} /> System healthy</span>
       </div>
@@ -83,57 +71,60 @@ export default function UserManagement() {
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Member</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Joined</th>
-              <th>Deals saved</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <div className="cell-head">
-                    <Avatar text={u.name} size="sm" />
-                    <div>
-                      <div className="c-name">{u.name}</div>
-                      <div className="c-sub">{u.email}</div>
-                    </div>
-                  </div>
-                </td>
-                <td><Badge tone={ROLE[u.role] || 'gray'}>{u.role}</Badge></td>
-                <td>
-                  <Badge tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'red'}>{u.status}</Badge>
-                </td>
-                <td>{u.joined}</td>
-                <td>{u.deals}</td>
-                <td>
-                  <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-                    <Button variant="ghost" className="btn-icon" title="View profile"><Icon name="i-eye" size={15} /></Button>
-                    {u.status !== 'pending' && (
-                      <Button
-                        variant="ghost"
-                        className="btn-icon"
-                        title={u.status === 'suspended' ? 'Restore' : 'Suspend'}
-                        disabled={busyId === u.id}
-                        onClick={() => toggle(u)}
-                      >
-                        <Icon name={u.status === 'suspended' ? 'i-refresh' : 'i-user'} size={15} style={{ color: u.status === 'suspended' ? 'var(--primary)' : 'var(--danger)' }} />
-                      </Button>
-                    )}
-                  </div>
-                </td>
+      {list.length === 0 ? (
+        <div className="card"><p className="muted small" style={{ margin: 0 }}>No members match this filter.</p></div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>{filter.includes('Merchant') || filter === 'All' ? 'Deals' : 'Saves'}</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <div className="cell-head">
+                      <Avatar text={u.name} size="sm" />
+                      <div>
+                        <div className="c-name">{u.name}</div>
+                        <div className="c-sub">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><Badge tone={ROLE[u.role]}>{u.role}</Badge></td>
+                  <td>
+                    <Badge tone={u.status === 'active' ? 'green' : u.status === 'pending' ? 'amber' : 'red'}>{u.status}</Badge>
+                  </td>
+                  <td>{u.joined}</td>
+                  <td>{u.deals}</td>
+                  <td>
+                    <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
+                      {u.status !== 'pending' && u.role !== 'admin' && (
+                        <Button
+                          variant="ghost"
+                          className="btn-icon"
+                          title={u.status === 'suspended' ? 'Restore' : 'Suspend'}
+                          disabled={busyId === u.id}
+                          onClick={() => toggle(u)}
+                        >
+                          <Icon name={u.status === 'suspended' ? 'i-refresh' : 'i-user'} size={15} style={{ color: u.status === 'suspended' ? 'var(--primary)' : 'var(--danger)' }} />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

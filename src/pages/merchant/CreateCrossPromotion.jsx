@@ -5,34 +5,71 @@ import Icon from '../../components/ui/Icon'
 import Stepper from '../../components/ui/Stepper'
 import { Field, Input, Textarea } from '../../components/ui/Fields'
 import { gradientFor } from '../../utils/gradients'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
+import { useAuth } from '../../utils/useAuth'
 import { useToast } from '../../components/ui/useToast'
 
 const STEPS = ['Your business', 'Partner', 'Offer', 'Dates & terms', 'Preview']
 
-const NEIGHBORS = [
-  { id: 'm3', name: 'Sunflower Bakehouse', category: 'Bakeries', addr: '3 Meadow Road', rating: 4.9 },
-  { id: 'm2', name: 'Ember & Oak Grill', category: 'Restaurants', addr: '88 Coal Street', rating: 4.6 },
-  { id: 'm9', name: 'Page & Plume Books', category: 'Gifts & Local', addr: '7 Quill Court', rating: 4.8 },
-  { id: 'm5', name: 'The Copper Studio', category: 'Services', addr: '27 Foundry Ave', rating: 4.7 },
-  { id: 'm4', name: 'Petal & Stem Florist', category: 'Gifts & Local', addr: '45 Garden Walk', rating: 4.7 },
-]
+function toYmd(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mm}-${dd}`
+}
 
 export default function CreateCrossPromotion() {
   const navigate = useNavigate()
   const toast = useToast()
+  const { user } = useAuth()
+  const { data: partners, loading, error } = useApi(() => api.merchant.partners(), [], [])
+  const today = toYmd(new Date().toISOString())
+
   const [step, setStep] = useState(0)
   const [form, setForm] = useState({
-    mine: 'Bean & Leaf',
     partner: null,
     offer: '',
-    value: '',
-    start: '2026-08-28',
+    start: today,
     end: '',
     terms: '',
   })
+  const [busy, setBusy] = useState(false)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1))
   const back = () => setStep((s) => Math.max(s - 1, 0))
+
+  const submit = async () => {
+    if (!form.partner || !form.offer.trim() || !form.start || !form.end) {
+      toast('Partner, offer, start, and end are required')
+      return
+    }
+    if (form.end <= form.start) {
+      toast('End date must be after start date')
+      return
+    }
+    setBusy(true)
+    try {
+      await api.merchant.createPromotion({
+        partnerId: form.partner.id,
+        offer: form.offer.trim(),
+        terms: form.terms.split('\n').map((t) => t.trim()).filter(Boolean),
+        start: form.start,
+        end: form.end,
+      })
+      toast('Promotion request sent — your partner has been notified')
+      navigate('/merchant/promotions')
+    } catch (err) {
+      toast(err.message || 'Could not send promotion request')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <div className="card card-pad"><PageLoading text="Finding partners…" /></div>
+  if (error) return <PageError text="Could not load partner businesses." />
 
   return (
     <div>
@@ -49,13 +86,12 @@ export default function CreateCrossPromotion() {
         {step === 0 && (
           <div className="col" style={{ gap: 14 }}>
             <h4>Which business is offering this promotion?</h4>
-            {['Bean & Leaf', 'Sunflower Bakehouse', 'Page & Plume Books'].map((name) => (
-              <label key={name} className="role-card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <input type="radio" name="mine" checked={form.mine === name} onChange={() => setForm((f) => ({ ...f, mine: name }))} style={{ accentColor: 'var(--primary)', width: 17, height: 17 }} />
-                <span className="logo-badge" style={{ background: gradientFor(name), width: 38, height: 38, borderRadius: 11 }}>{name.slice(0, 2)}</span>
-                <span className="bold">{name}</span>
-              </label>
-            ))}
+            <div className="role-card" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span className="logo-badge" style={{ background: gradientFor(user?.name || 'Me'), width: 38, height: 38, borderRadius: 11 }}>
+                {(user?.name || 'Me').slice(0, 2)}
+              </span>
+              <span className="bold">{user?.name || 'Your business'}</span>
+            </div>
           </div>
         )}
 
@@ -63,26 +99,30 @@ export default function CreateCrossPromotion() {
           <div className="col" style={{ gap: 12 }}>
             <h4>Choose your partner business</h4>
             <p className="small muted" style={{ marginTop: -8 }}>
-              Browsing this list only — tap a shop to select it. You'll see their public rating and distance.
+              Live merchants only — tap a shop to select it. You'll see their public rating.
             </p>
-            {NEIGHBORS.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className="role-card row"
-                style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%' }}
-                onClick={() => setForm((f) => ({ ...f, partner: n }))}
-              >
-                <span className="logo-badge" style={{ background: gradientFor(n.name), width: 38, height: 38, borderRadius: 11 }}>{n.name.slice(0, 2)}</span>
-                <span className="grow" style={{ textAlign: 'left' }}>
-                  <strong style={{ display: 'block' }}>{form.partner?.id === n.id ? `✓ ${n.name}` : n.name}</strong>
-                  <span>{n.category} · {n.addr} · {n.rating.toFixed(1)}★</span>
-                </span>
-                <span className={`radio`}>
-                  <input type="radio" readOnly checked={form.partner?.id === n.id} style={{ accentColor: 'var(--primary)', width: 17, height: 17 }} />
-                </span>
-              </button>
-            ))}
+            {(partners || []).length === 0 ? (
+              <p className="small muted">No other live merchants found yet.</p>
+            ) : (
+              (partners || []).map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  className="role-card row"
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, width: '100%' }}
+                  onClick={() => setForm((f) => ({ ...f, partner: n }))}
+                >
+                  <span className="logo-badge" style={{ background: gradientFor(n.name), width: 38, height: 38, borderRadius: 11 }}>{n.name.slice(0, 2)}</span>
+                  <span className="grow" style={{ textAlign: 'left' }}>
+                    <strong style={{ display: 'block' }}>{form.partner?.id === n.id ? `✓ ${n.name}` : n.name}</strong>
+                    <span>{n.category} · {n.addr} · {Number(n.rating || 0).toFixed(1)}★</span>
+                  </span>
+                  <span className="radio">
+                    <input type="radio" readOnly checked={form.partner?.id === n.id} style={{ accentColor: 'var(--primary)', width: 17, height: 17 }} />
+                  </span>
+                </button>
+              ))
+            )}
           </div>
         )}
 
@@ -96,9 +136,6 @@ export default function CreateCrossPromotion() {
             )}
             <Field label="What does the customer get?" required hint="Example: “Buy a cappuccino at Bean & Leaf, get 15% off any haircut at The Copper Studio.”">
               <Textarea placeholder="Describe the combined offer across both businesses…" value={form.offer} onChange={set('offer')} />
-            </Field>
-            <Field label="Discount note" hint="Shown as the flashy badge on the card.">
-              <Input placeholder="e.g. $9 duo / 15% off / BOGO" value={form.value} onChange={set('value')} />
             </Field>
           </div>
         )}
@@ -124,13 +161,13 @@ export default function CreateCrossPromotion() {
           <div className="col" style={{ gap: 16 }}>
             <h4>Preview your cross-promotion</h4>
             <div className="card card-hover deal-card deal-tile">
-              <div className="deal-cover" style={{ background: gradientFor(`${form.mine} × ${form.partner?.name || 'Partner'}`), height: 120 }}>
+              <div className="deal-cover" style={{ background: gradientFor(`${user?.name || 'Me'} + ${form.partner?.name || 'Partner'}`), height: 120 }}>
                 <span className="deal-tag">BUNDLE</span>
                 <span className="deal-save saved"><Icon name="i-bookmark" /></span>
               </div>
               <div className="deal-body">
                 <div className="merchant">
-                  <span>{form.mine}</span>
+                  <span>{user?.name || 'Your business'}</span>
                   <span style={{ opacity: 0.55 }}>×</span>
                   <span>{form.partner?.name || '…'}</span>
                 </div>
@@ -139,13 +176,13 @@ export default function CreateCrossPromotion() {
                   <span><Icon name="i-clock" /> {form.start} → {form.end || '—'}</span>
                 </div>
                 <div className="foot">
-                  <span className="badge badge-amber">{form.value || 'Bundle'}</span>
+                  <span className="badge badge-amber">Bundle</span>
                   <span className="btn btn-sm btn-outline">View deal</span>
                 </div>
               </div>
             </div>
             <div className="hint-role" style={{ marginTop: 0 }}>
-              Once published, both businesses get notified and the bundle appears in the deals feed with both shops listed.
+              Your partner will be asked to accept. Once they do, the bundle appears in the deals feed with both shops listed.
             </div>
           </div>
         )}
@@ -160,14 +197,8 @@ export default function CreateCrossPromotion() {
               Next step <Icon name="i-chevron-right" size={15} />
             </Button>
           ) : (
-            <Button
-              variant="primary"
-              onClick={() => {
-                toast('Cross-promotion published — partners notified!')
-                navigate('/merchant/promotions')
-              }}
-            >
-              <Icon name="i-check" size={15} /> Publish promotion
+            <Button variant="primary" disabled={busy} onClick={submit}>
+              <Icon name="i-check" size={15} /> {busy ? 'Sending…' : 'Send request'}
             </Button>
           )}
         </div>

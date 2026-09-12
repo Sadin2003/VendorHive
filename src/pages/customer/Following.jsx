@@ -5,22 +5,30 @@ import Button from '../../components/ui/Button'
 import Avatar from '../../components/ui/Avatar'
 import StarRating from '../../components/ui/StarRating'
 import EmptyState from '../../components/ui/EmptyState'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
 
-const INITIAL = [
-  { id: 'm1', name: 'Bean & Leaf', category: 'Cafés', rating: 4.8, reviews: 214, addr: '12 Maple Lane' },
-  { id: 'm2', name: 'Ember & Oak Grill', category: 'Restaurants', rating: 4.6, reviews: 342, addr: '88 Coal Street' },
-  { id: 'm5', name: 'The Copper Studio', category: 'Services', rating: 4.7, reviews: 158, addr: '27 Foundry Ave' },
-  { id: 'm11', name: 'Glow & Grace Spa', category: 'Health & Beauty', rating: 4.9, reviews: 167, addr: '64 Honeycomb Sq' },
-]
-
 export default function Following() {
-  const [list, setList] = useState(INITIAL)
   const toast = useToast()
+  const [removed, setRemoved] = useState(() => new Set())
+  const { data, loading, error } = useApi(() => api.me.following(), [], [])
+  const list = (data || []).filter((b) => !removed.has(b.id))
 
-  const unfollow = (id) => {
-    setList((l) => l.filter((x) => x.id !== id))
+  const unfollow = async (id) => {
+    setRemoved((prev) => new Set(prev).add(id))
     toast('Unfollowed — you will no longer get alerts')
+    try {
+      await api.me.unfollow(id)
+    } catch {
+      setRemoved((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      toast('Could not unfollow')
+    }
   }
 
   return (
@@ -33,7 +41,11 @@ export default function Following() {
         <Button to="/explore" variant="outline"><Icon name="i-plus" size={15} /> Follow more</Button>
       </div>
 
-      {list.length === 0 ? (
+      {loading ? (
+        <div className="card card-pad"><PageLoading text="Loading businesses…" /></div>
+      ) : error ? (
+        <PageError text="Could not load your followed businesses." />
+      ) : list.length === 0 ? (
         <div className="card">
           <EmptyState
             icon="i-heart"
@@ -50,13 +62,13 @@ export default function Following() {
                 <Avatar text={b.name} size="md" />
                 <div className="grow">
                   <Link to={`/vendors/${b.id}`} className="bold" style={{ fontSize: '0.98rem' }}>{b.name}</Link>
-                  <div className="small muted">{b.category} · {b.addr}</div>
+                  <div className="small muted">{b.category}{b.address ? ` · ${b.address}` : ''}</div>
                 </div>
               </div>
               <div className="row-between" style={{ marginBottom: 14 }}>
                 <span className="rating-line">
                   <StarRating value={b.rating} size={13} />
-                  <span className="avg">{b.rating.toFixed(1)}</span>
+                  <span className="avg">{Number(b.rating).toFixed(1)}</span>
                   <span className="count">({b.reviews})</span>
                 </span>
               </div>

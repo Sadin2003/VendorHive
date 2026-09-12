@@ -1,34 +1,25 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import SearchInput from '../../components/ui/SearchInput'
 import BusinessCard from '../../components/cards/BusinessCard'
 import DealCard from '../../components/cards/DealCard'
+import { SkeletonGrid, PageError } from '../../components/ui/Loading'
 import { gradientFor } from '../../utils/gradients'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 
-const CATEGORIES = [
-  { name: 'Restaurants', icon: '🍽', count: 128 },
-  { name: 'Cafés', icon: '☕', count: 84 },
-  { name: 'Bakeries', icon: '🥐', count: 46 },
-  { name: 'Clothing', icon: '👕', count: 61 },
-  { name: 'Electronics', icon: '🔌', count: 39 },
-  { name: 'Services', icon: '✂️', count: 97 },
-  { name: 'Health & Beauty', icon: '💆', count: 73 },
-  { name: 'Gifts & Local', icon: '🎁', count: 58 },
-]
-
-const FEATURED = [
-  { id: 'm1', name: 'Bean & Leaf', category: 'Cafés', address: '12 Maple Lane', rating: 4.8, reviews: 214, verified: true, featured: true, openNow: true, emoji: '☕' },
-  { id: 'm2', name: 'Ember & Oak Grill', category: 'Restaurants', address: '88 Coal Street', rating: 4.6, reviews: 342, verified: true, featured: true, openNow: true, emoji: '🍖' },
-  { id: 'm3', name: 'Sunflower Bakehouse', category: 'Bakeries', address: '3 Meadow Road', rating: 4.9, reviews: 176, verified: true, featured: true, openNow: false, emoji: '🥐' },
-  { id: 'm5', name: 'The Copper Studio', category: 'Services', address: '27 Foundry Ave', rating: 4.7, reviews: 158, verified: true, featured: true, openNow: true, emoji: '✂️' },
-]
-
-const DEALS = [
-  { id: 'd1', merchant: 'Bean & Leaf', category: 'Cafés', title: 'BOGO any signature brew after 3pm', tag: 'BOGO', discount: 'Buy 1 Get 1', views: 4210, saves: 1180, expiresIn: '6 days left' },
-  { id: 'd2', merchant: 'Ember & Oak Grill', category: 'Restaurants', title: '20% off the Tuesday steak night menu', tag: '20% OFF', discount: '20% off', views: 3310, saves: 940, expiresIn: '3 days left' },
-  { id: 'd5', merchant: 'Volt City Repairs', category: 'Electronics', title: 'Free diagnostics with any repair over $50', tag: 'FREE', discount: 'Free check-up', views: 1890, saves: 520, expiresIn: '9 days left' },
-]
+const CATEGORY_ICONS = {
+  Restaurants: '🍽',
+  Cafés: '☕',
+  Bakeries: '🥐',
+  Clothing: '👕',
+  Electronics: '🔌',
+  Services: '✂️',
+  'Health & Beauty': '💆',
+  'Gifts & Local': '🎁',
+}
 
 const STEPS = [
   { icon: 'i-search', title: 'Discover nearby gems', text: 'Browse verified local businesses on an interactive map and filter by category, hours, or active deals.' },
@@ -44,6 +35,14 @@ const FEATURE_ICONS = [
 ]
 
 export default function Home() {
+  const [q, setQ] = useState('')
+  const { data: categories, loading: catLoading, error: catError } = useApi(() => api.public.categories(), [])
+  const { data: featured, loading: featLoading, error: featError } = useApi(() => api.public.businesses({ featured: true, limit: 4 }), [])
+  const { data: deals, loading: dealsLoading, error: dealsError } = useApi(() => api.public.deals({ sort: 'saves', limit: 3 }), [])
+
+  const counts = categories || []
+  const total = counts.reduce((a, c) => a + (c.count || 0), 0)
+
   return (
     <>
       <section className="hero">
@@ -51,7 +50,7 @@ export default function Home() {
         <div className="hero-blob b" />
         <div className="container">
           <span className="badge badge-green" style={{ padding: '6px 14px', fontSize: '0.78rem', marginBottom: 18 }}>
-            🌱 {CATEGORIES.reduce((a, c) => a + c.count, 0)}+ local businesses on VendorHive
+            🌱 {catLoading ? '…' : total.toLocaleString()}+ local businesses on VendorHive
           </span>
           <h1>
             Discover local. <span style={{ color: 'var(--primary)' }}>Deal big.</span>
@@ -64,10 +63,10 @@ export default function Home() {
             className="hero-search"
             onSubmit={(e) => {
               e.preventDefault()
-              window.location.href = '/explore'
+              window.location.href = `/explore${q ? `?q=${encodeURIComponent(q)}` : ''}`
             }}
           >
-            <SearchInput placeholder="Search businesses, deals, or categories…" onChange={() => {}} />
+            <SearchInput value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search businesses, deals, or categories…" />
             <Button type="submit">
               <Icon name="i-search" />
               Search
@@ -96,19 +95,27 @@ export default function Home() {
               Explore all →
             </Link>
           </div>
-          <div className="grid grid-4">
-            {CATEGORIES.map((c) => (
-              <Link key={c.name} to={`/explore?cat=${encodeURIComponent(c.name)}`} className="card card-hover category-card">
-                <span className="cat-icon" style={{ background: gradientFor(c.name), color: '#fff' }}>
-                  {c.icon}
-                </span>
-                <div>
-                  <div className="cat-name">{c.name}</div>
-                  <div className="cat-count">{c.count} businesses</div>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {catLoading ? (
+            <SkeletonGrid n={4} style={{ gridTemplateColumns: 'repeat(4, 1fr)' }} />
+          ) : catError ? (
+            <PageError text="Could not load categories." />
+          ) : counts.length === 0 ? (
+            <EmptyNote text="No categories yet — check back soon." />
+          ) : (
+            <div className="grid grid-4">
+              {counts.map((c) => (
+                <Link key={c.name} to={`/explore?cat=${encodeURIComponent(c.name)}`} className="card card-hover category-card">
+                  <span className="cat-icon" style={{ background: gradientFor(c.name), color: '#fff' }}>
+                    {CATEGORY_ICONS[c.name] || '🏪'}
+                  </span>
+                  <div>
+                    <div className="cat-name">{c.name}</div>
+                    <div className="cat-count">{c.count} businesses</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Featured businesses */}
@@ -122,11 +129,19 @@ export default function Home() {
               View all →
             </Link>
           </div>
-          <div className="carousel">
-            {FEATURED.map((b) => (
-              <BusinessCard key={b.id} business={b} />
-            ))}
-          </div>
+          {featLoading ? (
+            <SkeletonGrid n={4} style={{ gridTemplateColumns: 'repeat(4, 1fr)' }} />
+          ) : featError ? (
+            <PageError text="Could not load featured businesses." />
+          ) : (featured || []).length === 0 ? (
+            <EmptyNote text="No featured businesses yet." />
+          ) : (
+            <div className="carousel">
+              {featured.map((b) => (
+                <BusinessCard key={b.id} business={b} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Popular deals */}
@@ -140,11 +155,19 @@ export default function Home() {
               See all deals →
             </Link>
           </div>
-          <div className="grid grid-3">
-            {DEALS.map((d) => (
-              <DealCard key={d.id} deal={d} />
-            ))}
-          </div>
+          {dealsLoading ? (
+            <SkeletonGrid n={3} />
+          ) : dealsError ? (
+            <PageError text="Could not load deals." />
+          ) : (deals || []).length === 0 ? (
+            <EmptyNote text="No live deals right now." />
+          ) : (
+            <div className="grid grid-3">
+              {deals.map((d) => (
+                <DealCard key={d.id} deal={d} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* How it works */}
@@ -211,4 +234,8 @@ export default function Home() {
       </div>
     </>
   )
+}
+
+function EmptyNote({ text }) {
+  return <p className="muted small" style={{ padding: '14px 0' }}>{text}</p>
 }

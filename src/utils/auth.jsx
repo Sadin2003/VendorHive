@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthContext } from './authContext'
 import { api } from '../services/api'
 
@@ -13,62 +13,65 @@ function readStored() {
   }
 }
 
+function persist(user) {
+  try {
+    if (user) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
+    else window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore storage errors
+  }
+}
+
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(readStored)
-  const [initializing, setInitializing] = useState(true)
-
-  const persist = (u) => {
-    setUser(u)
-    try {
-      if (u) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(u))
-      else window.localStorage.removeItem(STORAGE_KEY)
-    } catch {
-      // ignore storage errors
-    }
-  }
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    let active = true
-    api.auth
-      .me()
-      .then((res) => {
-        if (active) persist(res.user)
-      })
-      .catch(() => {
-        if (active) persist(null)
-      })
-      .finally(() => {
-        if (active) setInitializing(false)
-      })
+    let cancelled = false
+
+    const restore = async () => {
+      try {
+        const stored = readStored()
+        if (!stored) {
+          setReady(true)
+          return
+        }
+        const { user: fresh } = await api.auth.me()
+        if (!cancelled) {
+          setUser(fresh)
+          setReady(true)
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null)
+          persist(null)
+          setReady(true)
+        }
+      }
+    }
+
+    restore()
     return () => {
-      active = false
+      cancelled = true
     }
   }, [])
 
-  const login = useCallback(async (payload) => {
-    const res = await api.auth.login(payload)
-    persist(res.user)
-    return res.user
-  }, [])
+  useEffect(() => {
+    persist(user)
+  }, [user])
 
-  const register = useCallback(async (payload) => {
-    const res = await api.auth.register(payload)
-    persist(res.user)
-    return res.user
-  }, [])
+  const login = (u) => setUser(u)
 
-  const logout = useCallback(async () => {
+  const logout = async () => {
     try {
       await api.auth.logout()
     } catch {
-      // ignore network errors on logout
+      // server session may already be gone — clear locally regardless
     }
-    persist(null)
-  }, [])
+    setUser(null)
+  }
 
   return (
-    <AuthContext.Provider value={{ user, initializing, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={{ user, login, logout, ready }}>{children}</AuthContext.Provider>
   )
 }
