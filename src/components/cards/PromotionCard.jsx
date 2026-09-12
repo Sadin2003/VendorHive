@@ -9,7 +9,7 @@ const STATUS_BADGE = {
   pending: 'amber',
 }
 
-export default function PromotionCard({ promo }) {
+export default function PromotionCard({ promo, children }) {
   return (
     <div className="card card-hover card-pad">
       <div className="row-between" style={{ marginBottom: 14 }}>
@@ -52,6 +52,7 @@ export default function PromotionCard({ promo }) {
           </span>
         </span>
       </div>
+      {children}
     </div>
   )
 }

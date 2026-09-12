@@ -1,57 +1,57 @@
-import { useEffect, useState } from 'react'
+import Icon from '../../components/ui/Icon'
 import StatCard from '../../components/ui/StatCard'
 import { AdminAreaChart, AdminBarChart } from './Dashboard'
-import { api, csvUrl } from '../../services/api'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
+import { useToast } from '../../components/ui/useToast'
 
-const FALLBACK = {
-  kpis: [
-    { label: 'Total profile views', value: '1.28M', delta: '+24% this quarter' },
-    { label: 'Deal redemptions', value: '86,204', delta: '+9% this month' },
-    { label: 'Active trippers', value: '6,120', delta: '+412 this week' },
-    { label: 'Avg. deal value', value: '$11.42', delta: '+$0.68' },
-  ],
-  monthlyActive: [],
-  weeklySignups: [],
-  cats: [],
+function escapeCell(v) {
+  const s = String(v ?? '')
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+  return s
 }
 
-const KPI_META = [
-  { icon: 'i-eye', tone: 'green' },
-  { icon: 'i-bookmark-o', tone: 'amber' },
-  { icon: 'i-users', tone: 'cyan' },
-  { icon: 'i-chart', tone: 'red' },
-]
+function downloadCsv(rows, filename) {
+  const csv = rows.map((r) => r.map(escapeCell).join(',')).join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 export default function Analytics() {
-  const [data, setData] = useState(FALLBACK)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const toast = useToast()
+  const { data, loading, error } = useApi(
+    () => Promise.all([api.admin.analytics(), api.admin.dashboard()]),
+    [],
+    null
+  )
 
-  useEffect(() => {
-    let active = true
-    api.admin
-      .analytics()
-      .then((res) => { if (active) setData(res.data || FALLBACK) })
-      .catch((e) => { if (active) setError(e.message) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading analytics…" /></div>
+  if (error) return <PageError text="Could not load analytics." />
+  if (!data) return null
 
-  const kpis = (data.kpis && data.kpis.length ? data.kpis : FALLBACK.kpis).map((k, i) => ({
-    ...k,
-    icon: (KPI_META[i] || {}).icon,
-    tone: (KPI_META[i] || {}).tone,
-  }))
+  const [analytics, dashboard] = data
 
   const exportCsv = () => {
-    window.open(csvUrl('/admin/analytics/export'), '_blank')
-  }
-
-  if (loading) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading analytics…</div>
-  }
-  if (error) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
+    const rows = [
+      ['section', 'label', 'value', 'delta'],
+      ...(analytics.kpis || []).map((k) => ['kpi', k.label, k.value, k.delta || '']),
+      ['category', 'deals', 'saves'],
+      ...(analytics.categories || []).map((c) => ['category:' + c.c, c.deals, c.saves]),
+      ['growth', 'members'],
+      ...((dashboard.growth || []).map((v, i) => ['month:' + (i + 1) + '-' + (i + 12), v])),
+      ['signups', 'members'],
+      ...((dashboard.signups || []).map((v, i) => ['week:' + (i + 1), v])),
+    ]
+    downloadCsv(rows, `vendorhive-analytics-${new Date().toISOString().slice(0, 10)}.csv`)
+    toast('Analytics exported as CSV')
   }
 
   return (
@@ -62,13 +62,15 @@ export default function Analytics() {
           <p>Platform-wide health, from signups to saves.</p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <span className="badge badge-gray">Live</span>
-          <button type="button" className="btn btn-outline btn-sm" onClick={exportCsv}>Export CSV</button>
+          <span className="badge badge-gray">Last 12 months</span>
+          <button type="button" className="btn btn-outline btn-sm" onClick={exportCsv}>
+            <Icon name="i-download" size={13} style={{ verticalAlign: -2, marginRight: 4 }} /> Export CSV
+          </button>
         </div>
       </div>
 
       <div className="grid grid-4">
-        {kpis.map((s) => (
+        {(analytics.kpis || []).map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
       </div>
@@ -77,26 +79,30 @@ export default function Analytics() {
         <div className="card card-pad">
           <h4 style={{ margin: '0 0 4px' }}>Member growth</h4>
           <p className="small muted" style={{ margin: 0 }}>Active monthly members</p>
-          <AdminAreaChart data={data.monthlyActive} />
+          <AdminAreaChart data={dashboard.growth} />
         </div>
         <div className="card card-pad">
           <h4 style={{ margin: '0 0 4px' }}>New member signups</h4>
           <p className="small muted" style={{ margin: 0 }}>Weekly new accounts</p>
-          <AdminBarChart data={data.weeklySignups} />
+          <AdminBarChart data={dashboard.signups} />
         </div>
       </div>
 
       <div className="card card-pad" style={{ marginTop: 20 }}>
         <h4 style={{ margin: '0 0 16px' }}>Top categories by deal saves</h4>
-        {data.cats.map((r) => (
-          <div key={r.c} className="row" style={{ gap: 12, padding: '6px 0' }}>
-            <span className="small bold" style={{ width: 160 }}>{r.c}</span>
-            <div className="progress grow"><i style={{ width: `${r.pct}%` }} /></div>
-            <span className="tiny muted" style={{ width: 70, textAlign: 'right' }}>
-              {r.deals} deals · {r.saves.toLocaleString()}
-            </span>
-          </div>
-        ))}
+        {(analytics.categories || []).length === 0 ? (
+          <p className="muted small" style={{ margin: 0 }}>No deal data yet.</p>
+        ) : (
+          (analytics.categories || []).map((r) => (
+            <div key={r.c} className="row" style={{ gap: 12, padding: '6px 0' }}>
+              <span className="small bold" style={{ width: 160 }}>{r.c}</span>
+              <div className="progress grow"><i style={{ width: `${r.pct}%` }} /></div>
+              <span className="tiny muted" style={{ width: 90, textAlign: 'right' }}>
+                {r.deals} deals · {r.saves.toLocaleString()}
+              </span>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )

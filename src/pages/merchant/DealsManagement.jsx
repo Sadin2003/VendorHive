@@ -3,38 +3,36 @@ import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
-
-const INITIAL = [
-  { id: 'd1', title: 'BOGO any signature brew after 3pm', status: 'active', views: 4210, saves: 1180, start: 'Aug 12', end: 'Sep 6' },
-  { id: 'd7', title: 'Bundle: cappuccino + croissant duo for $9', status: 'active', views: 5120, saves: 1734, start: 'Aug 10', end: 'Sep 10' },
-  { id: 'd11', title: 'Monday happy-hour latte special', status: 'scheduled', views: 0, saves: 0, start: 'Sep 12', end: 'Oct 12' },
-  { id: 'd12', title: 'First-visit 10% off loyalty card', status: 'draft', views: 0, saves: 0, start: '—', end: '—' },
-  { id: 'd13', title: 'Back-to-school cold brew bucket', status: 'expired', views: 3180, saves: 640, start: 'Jun 1', end: 'Jul 31' },
-]
 
 const STATUS_TONE = { active: 'green', scheduled: 'cyan', draft: 'gray', expired: 'red' }
 
 const FILTERS = ['All', 'Active', 'Scheduled', 'Draft', 'Expired']
 
 export default function DealsManagement() {
-  const [deals, setDeals] = useState(INITIAL)
-  const [filter, setFilter] = useState('All')
   const toast = useToast()
-
+  const [filter, setFilter] = useState('All')
+  const { data, loading, error, refetch } = useApi(() => api.merchant.deals(), [], [])
   const list = useMemo(
-    () => deals.filter((d) => filter === 'All' || d.status === filter.toLowerCase()),
-    [deals, filter]
+    () => (data || []).filter((d) => filter === 'All' || d.status === filter.toLowerCase()),
+    [data, filter]
   )
 
-  const expire = (id) => {
-    setDeals((ds) => ds.map((d) => (d.id === id ? { ...d, status: 'expired', end: 'Today' } : d)))
-    toast('Deal expired')
+  const del = async (id) => {
+    try {
+      await api.merchant.deleteDeal(id)
+      toast('Deal deleted')
+      refetch()
+    } catch (err) {
+      toast(err.message || 'Could not delete deal')
+    }
   }
-  const del = (id) => {
-    setDeals((ds) => ds.filter((d) => d.id !== id))
-    toast('Deal deleted')
-  }
+
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading deals…" /></div>
+  if (error) return <PageError text="Could not load deals." />
 
   return (
     <div>
@@ -58,7 +56,7 @@ export default function DealsManagement() {
         <div className="card">
           <EmptyState
             icon="i-tag"
-            title="No deals here yet"
+            title={filter === 'All' ? 'No deals yet' : `No ${filter.toLowerCase()} deals`}
             text="Create your first deal and start driving visitors to the shop."
             action={{ to: '/merchant/deals/new', variant: 'primary', children: 'Create a deal' }}
           />
@@ -86,7 +84,7 @@ export default function DealsManagement() {
                       </span>
                       <div>
                         <div className="c-name">{d.title}</div>
-                        <div className="c-sub">Starts {d.start}</div>
+                        <div className="c-sub">{d.published ? 'Live' : 'Draft'}</div>
                       </div>
                     </div>
                   </td>
@@ -98,9 +96,6 @@ export default function DealsManagement() {
                     <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
                       <span title="View"><Button to={`/deals/${d.id}`} variant="ghost" className="btn-icon"><Icon name="i-eye" size={15} /></Button></span>
                       <span title="Edit"><Button to={`/merchant/deals/${d.id}/edit`} variant="ghost" className="btn-icon"><Icon name="i-edit" size={15} /></Button></span>
-                      {d.status !== 'expired' && d.status !== 'scheduled' && (
-                        <span title="Expire"><Button variant="ghost" className="btn-icon" onClick={() => expire(d.id)}><Icon name="i-clock" size={15} style={{ color: 'var(--danger)' }} /></Button></span>
-                      )}
                       <span title="Delete"><Button variant="ghost" className="btn-icon" onClick={() => del(d.id)}><Icon name="i-trash" size={15} style={{ color: 'var(--danger)' }} /></Button></span>
                     </div>
                   </td>

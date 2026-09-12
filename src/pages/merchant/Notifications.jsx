@@ -1,45 +1,63 @@
 import { useState } from 'react'
-import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
-import NotificationItem from '../../components/cards/NotificationItem'
 import EmptyState from '../../components/ui/EmptyState'
+import NotificationItem from '../../components/cards/NotificationItem'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
+import { useAuth } from '../../utils/useAuth'
 import { useToast } from '../../components/ui/useToast'
 
-const FEED = [
-  { id: 'n1', type: 'review', icon: 'i-star', text: '<b>Aisha K.</b> left a 5-star review. Reply to say thanks.', time: '2 h ago', unread: true },
-  { id: 'n2', type: 'deal', icon: 'i-bookmark', text: 'Your bundle <b>d7</b> just hit <b>1,700 saves</b> — recent follower spike from Explore.', time: '5 h ago', unread: true },
-  { id: 'n3', type: 'promotion', icon: 'i-megaphone', text: '<b>Sunflower Bakehouse</b> accepted your cross-promotion request. It goes live Aug 28.', time: 'Yesterday', unread: true },
-  { id: 'n4', type: 'deal', icon: 'i-clock', text: 'Your deal <b>d1</b> expires in <b>3 days</b>. Consider extending it for the fall menu.', time: 'Yesterday', unread: false },
-  { id: 'n5', type: 'system', icon: 'i-eye', text: 'Profile views are up <b>+18%</b> this month. Nice work!', time: '3 days ago', unread: false },
-  { id: 'n6', type: 'system', icon: 'i-wallet', text: 'Next payout of <b>$412.65</b> arrives on the 5th.', time: '5 days ago', unread: false },
-]
-
 export default function Notifications() {
-  const [items, setItems] = useState(FEED)
   const toast = useToast()
+  const { user } = useAuth()
+  const [dismissed, setDismissed] = useState(() => new Set())
+  const { data, loading, error, refetch } = useApi(() => api.me.notifications(), [], [])
+  const items = (data || []).filter((n) => !dismissed.has(n.id))
   const unread = items.filter((n) => n.unread).length
+
+  const markAll = async () => {
+    try {
+      await api.me.markAllNotificationsRead()
+      toast('All marked as read')
+      refetch()
+    } catch {
+      toast('Could not update notifications')
+    }
+  }
+
+  const dismiss = async (id) => {
+    setDismissed((prev) => new Set(prev).add(id))
+    toast('Notification dismissed')
+    try {
+      await api.me.dismissNotification(id)
+    } catch {
+      setDismissed((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      toast('Could not dismiss notification')
+    }
+  }
 
   return (
     <div>
       <div className="section-head">
         <div>
           <h1 style={{ fontSize: '1.6rem' }}>Notifications</h1>
-          <p>{unread ? `${unread} unread for ${'Bean & Leaf'}` : "You're all caught up"}</p>
+          <p>{unread ? `${unread} unread for ${user?.name || 'your business'}` : "You're all caught up"}</p>
         </div>
-        {unread > 0 && (
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setItems((ns) => ns.map((n) => ({ ...n, unread: false })))
-              toast('All marked as read')
-            }}
-          >
-            <Icon name="i-check" size={14} /> Mark all read
-          </Button>
-        )}
+        <Button variant="outline" disabled={!unread} onClick={markAll}>
+          Mark all as read
+        </Button>
       </div>
 
-      {items.length === 0 ? (
+      {loading ? (
+        <div className="card card-pad"><PageLoading text="Loading notifications…" /></div>
+      ) : error ? (
+        <PageError text="Could not load notifications." />
+      ) : items.length === 0 ? (
         <div className="card">
           <EmptyState icon="i-bell" title="Nothing here yet" text="New saves, reviews, and partner requests will land here." />
         </div>
@@ -47,13 +65,7 @@ export default function Notifications() {
         <div className="card" style={{ overflow: 'hidden' }}>
           {items.map((n) => (
             <div key={n.id} style={{ borderBottom: '1px solid var(--border)' }}>
-              <NotificationItem
-                notif={n}
-                onRead={(id) => {
-                  setItems((i) => i.filter((x) => x.id !== id))
-                  toast('Notification dismissed')
-                }}
-              />
+              <NotificationItem notif={n} onRead={dismiss} />
             </div>
           ))}
         </div>

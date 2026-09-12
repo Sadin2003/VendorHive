@@ -3,22 +3,31 @@ import { Link } from 'react-router-dom'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import EmptyState from '../../components/ui/EmptyState'
+import { PageLoading, PageError } from '../../components/ui/Loading'
 import { gradientFor } from '../../utils/gradients'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
 
-const INITIAL = [
-  { id: 'd7', merchant: 'Bean & Leaf × Sunflower Bakehouse', title: 'Bundle: cappuccino + croissant duo for $9', discount: '$9 duo', expires: 'Sep 10, 2026', coverKey: 'Bean & Leaf × Sunflower Bakehouse Deal' },
-  { id: 'd2', merchant: 'Ember & Oak Grill', title: '20% off the Tuesday steak night menu', discount: '20% off', expires: 'Aug 31, 2026', coverKey: 'Ember & Oak Grill' },
-  { id: 'd6', merchant: 'The Copper Studio', title: '15% off your first cut + free beard trim', discount: '15% off', expires: 'Sep 12, 2026', coverKey: 'The Copper Studio' },
-]
-
 export default function SavedDeals() {
-  const [deals, setDeals] = useState(INITIAL)
   const toast = useToast()
+  const [removed, setRemoved] = useState(() => new Set())
+  const { data, loading, error } = useApi(() => api.me.saved(), [], [])
+  const deals = (data || []).filter((d) => !removed.has(d.id))
 
-  const remove = (id) => {
-    setDeals((d) => d.filter((x) => x.id !== id))
+  const remove = async (id) => {
+    setRemoved((prev) => new Set(prev).add(id))
     toast('Deal removed from saved')
+    try {
+      await api.me.unsaveDeal(id)
+    } catch {
+      setRemoved((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      toast('Could not remove deal')
+    }
   }
 
   return (
@@ -31,7 +40,11 @@ export default function SavedDeals() {
         <Button to="/deals" variant="outline"><Icon name="i-plus" size={15} /> Browse deals</Button>
       </div>
 
-      {deals.length === 0 ? (
+      {loading ? (
+        <div className="card card-pad"><PageLoading text="Loading your saved deals…" /></div>
+      ) : error ? (
+        <PageError text="Could not load your saved deals." />
+      ) : deals.length === 0 ? (
         <div className="card">
           <EmptyState
             icon="i-bookmark-o"
@@ -61,11 +74,13 @@ export default function SavedDeals() {
                     <div className="bold" style={{ fontSize: '0.98rem' }}>{d.title}</div>
                   </Link>
                   <div className="row" style={{ gap: 16, marginTop: 5 }}>
-                    <span className="badge badge-amber">{d.discount}</span>
-                    <span className="small muted">
-                      <Icon name="i-clock" size={13} style={{ verticalAlign: -2, marginRight: 4 }} />
-                      Expires {d.expires}
-                    </span>
+                    {d.discount && <span className="badge badge-amber">{d.discount}</span>}
+                    {d.expires && (
+                      <span className="small muted">
+                        <Icon name="i-clock" size={13} style={{ verticalAlign: -2, marginRight: 4 }} />
+                        Expires {d.expires}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="row" style={{ alignSelf: 'center', gap: 8 }}>

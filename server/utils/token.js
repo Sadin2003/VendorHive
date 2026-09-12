@@ -15,6 +15,10 @@ export function setTokenCookie(res, token) {
   })
 }
 
+export function clearTokenCookie(res) {
+  res.cookie('token', '', { httpOnly: true, expires: new Date(0) })
+}
+
 export function sanitizeUser(user) {
   return {
     id: user._id,

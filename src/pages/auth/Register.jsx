@@ -4,25 +4,30 @@ import AuthShell from '../../components/layout/AuthShell'
 import { Field, Input } from '../../components/ui/Fields'
 import Button from '../../components/ui/Button'
 import Icon from '../../components/ui/Icon'
+import { api } from '../../services/api'
 import { useToast } from '../../components/ui/useToast'
 import { useAuth } from '../../utils/useAuth'
+
+const CATEGORIES = ['Restaurants', 'Cafés', 'Bakeries', 'Clothing', 'Electronics', 'Services', 'Health & Beauty', 'Gifts & Local']
 
 export default function Register() {
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
-  const { register } = useAuth()
+  const { login } = useAuth()
   const [role, setRole] = useState('customer')
   const [terms, setTerms] = useState(false)
   const [show, setShow] = useState(false)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({
     name: '',
     business: '',
     owner: '',
     email: '',
     phone: '',
+    category: CATEGORIES[0],
+    address: '',
     password: '',
     confirm: '',
   })
@@ -39,8 +44,12 @@ export default function Register() {
       setError('Passwords do not match.')
       return
     }
+    if (role === 'merchant' && !form.business.trim()) {
+      setError('Please enter your business name.')
+      return
+    }
     setError('')
-    setLoading(true)
+    setBusy(true)
     try {
       const payload =
         role === 'merchant'
@@ -48,25 +57,27 @@ export default function Register() {
               role: 'merchant',
               owner: form.owner,
               businessName: form.business,
-              name: form.owner,
-              email: form.email,
+              category: form.category,
+              address: form.address,
               phone: form.phone,
+              email: form.email,
               password: form.password,
             }
-          : {
-              role: 'customer',
-              name: form.name,
-              email: form.email,
-              phone: form.phone,
-              password: form.password,
-            }
-      const user = await register(payload)
-      toast(user?.role === 'merchant' ? 'Merchant account created — pending approval!' : 'Account created — welcome to the hive!')
-      navigate(user?.role === 'merchant' ? from : from)
+          : { role: 'customer', name: form.name, phone: form.phone, email: form.email, password: form.password }
+
+      const { user } = await api.auth.register(payload)
+      login({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status })
+
+      if (role === 'merchant') {
+        toast('Application submitted — we\'ll review it shortly!')
+        navigate('/')
+      } else {
+        toast('Account created — welcome to the hive!')
+        navigate(from)
+      }
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.')
-    } finally {
-      setLoading(false)
+      setError(err.message || 'Could not create your account.')
+      setBusy(false)
     }
   }
 
@@ -103,14 +114,28 @@ export default function Register() {
             </Field>
           </div>
         ) : (
-          <div className="form-grid">
-            <Field label="Business name" required>
-              <Input required placeholder="Bean & Leaf" value={form.business} onChange={set('business')} />
-            </Field>
-            <Field label="Owner name" required>
-              <Input required placeholder="Alex Rivera" value={form.owner} onChange={set('owner')} />
-            </Field>
-          </div>
+          <>
+            <div className="form-grid">
+              <Field label="Business name" required>
+                <Input required placeholder="Bean & Leaf" value={form.business} onChange={set('business')} />
+              </Field>
+              <Field label="Owner name" required>
+                <Input required placeholder="Alex Rivera" value={form.owner} onChange={set('owner')} />
+              </Field>
+            </div>
+            <div className="form-grid">
+              <Field label="Category" required>
+                <select className="select" value={form.category} onChange={set('category')}>
+                  {CATEGORIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Address" required>
+                <Input required placeholder="12 Maple Lane, Hive City" value={form.address} onChange={set('address')} />
+              </Field>
+            </div>
+          </>
         )}
         <Field label="Email" required>
           <Input type="email" required placeholder="you@example.com" value={form.email} onChange={set('email')} />
@@ -138,8 +163,8 @@ export default function Register() {
           I agree to the <a href="#terms" onClick={(e) => e.preventDefault()}>Terms of Service</a> and{' '}
           <a href="#privacy" onClick={(e) => e.preventDefault()}>Privacy Policy</a>.
         </label>
-        <Button type="submit" block size="lg" disabled={loading}>
-          {loading ? 'Creating account…' : role === 'merchant' ? 'Create merchant account' : 'Create account'}
+        <Button type="submit" block size="lg" disabled={busy}>
+          {role === 'merchant' ? (busy ? 'Submitting…' : 'Create merchant account') : busy ? 'Creating…' : 'Create account'}
         </Button>
       </form>
       <p className="auth-switch text-center" style={{ marginTop: 20 }}>

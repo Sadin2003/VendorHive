@@ -2,12 +2,35 @@ import { useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import { Field, Input, Textarea } from '../../components/ui/Fields'
+import { api } from '../../services/api'
 import { useToast } from '../../components/ui/useToast'
+
+const TOPICS = ['Help with an account', 'Report a business', 'Merchant signup', 'Partnership', 'Something else']
 
 export default function Contact() {
   const toast = useToast()
-  const [form, setForm] = useState({ name: '', email: '', topic: 'Help with an account', message: '' })
+  const [sending, setSending] = useState(false)
+  const [form, setForm] = useState({ name: '', email: '', topic: TOPICS[0], message: '' })
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSending(true)
+    try {
+      await api.public.contact({
+        name: form.name,
+        email: form.email,
+        subject: form.topic,
+        message: form.message,
+      })
+      toast(`Thanks ${form.name.split(' ')[0] || 'there'}! We'll get back to you within a day.`)
+      setForm({ name: '', email: '', topic: TOPICS[0], message: '' })
+    } catch (err) {
+      toast(err?.message || 'Could not send your message.')
+    } finally {
+      setSending(false)
+    }
+  }
 
   return (
     <div className="container page">
@@ -20,11 +43,7 @@ export default function Contact() {
         <div>
           <form
             className="card card-pad"
-            onSubmit={(e) => {
-              e.preventDefault()
-              toast(`Thanks ${form.name.split(' ')[0] || 'there'}! We'll get back to you within a day.`)
-              setForm({ name: '', email: '', topic: 'Help with an account', message: '' })
-            }}
+            onSubmit={submit}
           >
             <div className="form-grid">
               <Field label="Your name" required>
@@ -46,9 +65,9 @@ export default function Contact() {
             <Field label="Message" required>
               <Textarea required value={form.message} onChange={set('message')} placeholder="Tell us what's on your mind…" />
             </Field>
-            <Button type="submit" block>
+            <Button type="submit" block disabled={sending}>
               <Icon name="i-send" />
-              Send message
+              {sending ? 'Sending…' : 'Send message'}
             </Button>
           </form>
         </div>

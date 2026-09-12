@@ -6,21 +6,22 @@ import StarRating from '../../components/ui/StarRating'
 import Modal from '../../components/ui/Modal'
 import { Field, Textarea } from '../../components/ui/Fields'
 import EmptyState from '../../components/ui/EmptyState'
+import { PageLoading, PageError } from '../../components/ui/Loading'
 import { toneFor } from '../../utils/gradients'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
 
-const INITIAL = [
-  { id: 'r1', merchantId: 'm2', merchant: 'Ember & Oak Grill', rating: 5, date: 'Aug 20, 2026', text: 'The Tuesday steak night is genuinely the best value dinner in Hive City. Whiskey glaze for the win.' },
-  { id: 'r2', merchantId: 'm1', merchant: 'Bean & Leaf', rating: 4, date: 'Aug 3, 2026', text: 'Excellent cold drip. Knock off one star because the line gets long right after 3pm (their own fault for being good).' },
-  { id: 'r3', merchantId: 'm9', merchant: 'Page & Plume Books', rating: 5, date: 'Jul 28, 2026', text: 'Asked for a recommendation and walked out with my new favorite novel. +1 to the reading-room cat.' },
-]
-
 export default function MyReviews() {
-  const [reviews, setReviews] = useState(INITIAL)
+  const toast = useToast()
+  const [removed, setRemoved] = useState(() => new Set())
+  const [updated, setUpdated] = useState(() => new Map())
   const [editId, setEditId] = useState(null)
   const [text, setText] = useState('')
   const [stars, setStars] = useState(5)
-  const toast = useToast()
+
+  const { data, loading, error } = useApi(() => api.me.reviews(), [], [])
+  const reviews = (data || []).filter((r) => !removed.has(r.id)).map((r) => updated.get(r.id) || r)
 
   const edit = (r) => {
     setEditId(r.id)
@@ -28,16 +29,31 @@ export default function MyReviews() {
     setStars(r.rating)
   }
 
-  const save = (e) => {
+  const save = async (e) => {
     e.preventDefault()
-    setReviews((rs) => rs.map((r) => (r.id === editId ? { ...r, text, rating: stars } : r)))
-    setEditId(null)
-    toast('Review updated')
+    try {
+      await api.me.updateReview(editId, { rating: stars, text })
+      setUpdated((m) => new Map(m).set(editId, { rating: stars, text }))
+      setEditId(null)
+      toast('Review updated')
+    } catch (err) {
+      toast(err?.message || 'Could not update review')
+    }
   }
 
-  const remove = (id) => {
-    setReviews((rs) => rs.filter((r) => r.id !== id))
+  const remove = async (id) => {
+    setRemoved((prev) => new Set(prev).add(id))
     toast('Review deleted')
+    try {
+      await api.me.deleteReview(id)
+    } catch {
+      setRemoved((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      toast('Could not delete review')
+    }
   }
 
   const active = reviews.find((r) => r.id === editId)
@@ -51,7 +67,11 @@ export default function MyReviews() {
         </div>
       </div>
 
-      {reviews.length === 0 ? (
+      {loading ? (
+        <div className="card card-pad"><PageLoading text="Loading your reviews…" /></div>
+      ) : error ? (
+        <PageError text="Could not load your reviews." />
+      ) : reviews.length === 0 ? (
         <div className="card">
           <EmptyState
             icon="i-star-o"

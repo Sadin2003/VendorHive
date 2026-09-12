@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button'
 import Icon from '../../components/ui/Icon'
 import { useToast } from '../../components/ui/useToast'
 import { useAuth } from '../../utils/useAuth'
+import { api } from '../../services/api'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export default function Login() {
   const [show, setShow] = useState(false)
   const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
   const from = location.state?.from || '/'
 
   const submit = async (e) => {
@@ -27,17 +28,16 @@ export default function Login() {
       return
     }
     setError('')
-    setLoading(true)
+    setBusy(true)
     try {
-      const user = await login({ email, password })
-      const role = user.role
+      const { user } = await api.auth.login({ email, password })
+      login({ id: user.id, name: user.name, email: user.email, role: user.role, status: user.status })
       toast('Welcome back to the hive!')
-      const home = { admin: '/admin', merchant: '/merchant', customer: from || '/account' }
-      navigate(role === 'customer' ? from : home[role])
+      const home = { admin: '/admin', merchant: '/merchant', customer: '/account' }
+      navigate(user.role === 'customer' ? from : home[user.role] || '/account')
     } catch (err) {
-      setError(err.message || 'Login failed. Please try again.')
-    } finally {
-      setLoading(false)
+      setError(err.message)
+      setBusy(false)
     }
   }
 
@@ -81,16 +81,12 @@ export default function Login() {
             <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
             Remember me
           </label>
-          <button
-            type="button"
-            className="btn-link"
-            onClick={() => toast('Password reset link sent to your email.')}
-          >
+          <Link to="/forgot-password" className="btn-link">
             Forgot password?
-          </button>
+          </Link>
         </div>
-        <Button type="submit" block size="lg" disabled={loading}>
-          {loading ? 'Logging in…' : 'Log in'}
+        <Button type="submit" block size="lg" disabled={busy}>
+          {busy ? 'Logging in…' : 'Log in'}
         </Button>
       </form>
       <p className="auth-switch text-center" style={{ marginTop: 20 }}>
@@ -100,7 +96,9 @@ export default function Login() {
         </Link>
       </p>
       <p className="hint-role">
-        <strong>Admin demo:</strong> <b>admin@vendorhive.app</b> / <b>admin1234</b>
+        <strong>Demo accounts:</strong> <b>maya@beanandleaf.co / password123</b> → merchant portal ·
+        <b> admin@vendorhive.app / admin1234</b> → admin portal ·
+        <b> aisha@example.com / password123</b> → customer dashboard.
       </p>
     </AuthShell>
   )

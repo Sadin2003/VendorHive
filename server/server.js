@@ -4,8 +4,12 @@ import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import connectDB from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
+import publicRoutes from './routes/publicRoutes.js'
+import customerRoutes from './routes/customerRoutes.js'
+import merchantRoutes from './routes/merchantRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import { notFound, errorHandler } from './middlewares/error.js'
+import { serveUploads } from './middlewares/upload.js'
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -22,7 +26,13 @@ app.use(cookieParser())
 app.get('/api/health', (req, res) => res.json({ success: true, message: 'VendorHive API running' }))
 
 app.use('/api/auth', authRoutes)
+app.use('/api', publicRoutes)
+app.use('/api/me', customerRoutes)
+app.use('/api/merchant', merchantRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/uploads', serveUploads)
+
+// Route groups get mounted here as later steps land:
 
 app.use(notFound)
 app.use(errorHandler)

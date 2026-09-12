@@ -3,37 +3,76 @@ import Button from '../../components/ui/Button'
 import Icon from '../../components/ui/Icon'
 import { Field, Input, Textarea, Select } from '../../components/ui/Fields'
 import { gradientFor } from '../../utils/gradients'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-const DEFAULT_HOURS = {
-  Mon: '7:00 am – 6:00 pm',
-  Tue: '7:00 am – 6:00 pm',
-  Wed: '7:00 am – 6:00 pm',
-  Thu: '7:00 am – 8:00 pm',
-  Fri: '7:00 am – 8:00 pm',
-  Sat: '8:00 am – 7:00 pm',
-  Sun: '9:00 am – 4:00 pm',
-}
+const CATEGORIES = ['Cafés', 'Restaurants', 'Bakeries', 'Clothing', 'Electronics', 'Services', 'Health & Beauty', 'Gifts & Local']
 
-export default function BusinessProfile() {
+function ProfileBody({ data, onSaved }) {
   const toast = useToast()
+  const [saving, setSaving] = useState(false)
   const [info, setInfo] = useState({
-    name: 'Bean & Leaf',
-    tagline: 'Specialty coffee, roasted in-house.',
-    category: 'Cafés',
-    phone: '(555) 010-2211',
-    email: 'hello@beanandleaf.co',
-    address: '12 Maple Lane, Hive City',
+    businessName: data.businessName || '',
+    tagline: data.tagline || '',
+    category: data.category || '',
+    phone: data.phone || '',
+    email: data.email || '',
+    address: data.address || '',
+    about: data.about || '',
+    emoji: data.emoji || '🏪',
   })
-  const [about, setAbout] = useState(
-    'A neighborhood espresso bar that roasts in-house twice a week. We serve single-origin brews, seasonal pastries from Sunflower Bakehouse, and pour the best cold drip on Maple Lane.'
-  )
-  const [hours, setHours] = useState(DEFAULT_HOURS)
-  const [gallery, setGallery] = useState(['counter', 'seating', 'patio', 'evening', 'roastery', 'menu'])
+  const [hours, setHours] = useState(() => {
+    const base = {}
+    for (const d of DAYS) base[d] = (data.hours && data.hours[d]) || ''
+    return base
+  })
 
   const setI = (k) => (e) => setInfo((s) => ({ ...s, [k]: e.target.value }))
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      await api.merchant.updateProfile({ ...info, hours })
+      toast('Profile saved')
+      onSaved()
+    } catch (err) {
+      toast(err.message || 'Could not save profile')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const uploadCover = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('cover', file)
+    try {
+      const res = await api.merchant.uploadCover(fd)
+      toast('Cover updated')
+      if (res && res.cover) onSaved()
+    } catch (err) {
+      toast(err.message || 'Could not upload cover')
+    }
+  }
+
+  const uploadGallery = async (e) => {
+    const files = Array.from(e.target.files || []).slice(0, 8)
+    if (!files.length) return
+    const fd = new FormData()
+    for (const f of files) fd.append('gallery', f)
+    try {
+      await api.merchant.uploadGallery(fd)
+      toast('Photos added')
+      onSaved()
+    } catch (err) {
+      toast(err.message || 'Could not upload photos')
+    }
+  }
 
   return (
     <div>
@@ -42,15 +81,19 @@ export default function BusinessProfile() {
           <h1 style={{ fontSize: '1.6rem' }}>Business profile</h1>
           <p>Keep this fresh — it's the first thing new customers see.</p>
         </div>
-        <Button variant="primary" onClick={() => toast('Profile saved')}>Save changes</Button>
+        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
       </div>
 
       <div className="card" style={{ overflow: 'hidden', marginBottom: 22 }}>
-        <div style={{ height: 150, background: gradientFor('Bean & Leaf'), position: 'relative' }}>
-          <span style={{ position: 'absolute', fontSize: 58, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>☕</span>
+        <div style={{ height: 150, background: gradientFor(info.businessName || 'Storefront'), position: 'relative' }}>
+          {data.cover ? (
+            <img src={data.cover} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          ) : (
+            <span style={{ position: 'absolute', fontSize: 58, inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>{info.emoji}</span>
+          )}
           <label className="btn btn-sm" style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(255,255,255,.92)', color: 'var(--text)' }}>
             <Icon name="i-camera" size={14} /> Change cover
-            <input type="file" accept="image/*" hidden />
+            <input type="file" accept="image/*" hidden onChange={uploadCover} />
           </label>
         </div>
       </div>
@@ -61,13 +104,12 @@ export default function BusinessProfile() {
             <h4 style={{ marginBottom: 18 }}>Basic info</h4>
             <div className="form-grid">
               <Field label="Business name" required>
-                <Input value={info.name} onChange={setI('name')} />
+                <Input value={info.businessName} onChange={setI('businessName')} />
               </Field>
               <Field label="Category" required>
                 <Select value={info.category} onChange={setI('category')}>
-                  {['Cafés', 'Restaurants', 'Bakeries', 'Clothing', 'Electronics', 'Services', 'Health & Beauty', 'Gifts & Local'].map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
+                  {!info.category && <option value="">Select…</option>}
+                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
                 </Select>
               </Field>
             </div>
@@ -75,7 +117,7 @@ export default function BusinessProfile() {
               <Input value={info.tagline} onChange={setI('tagline')} />
             </Field>
             <Field label="About / description" required>
-              <Textarea value={about} onChange={(e) => setAbout(e.target.value)} />
+              <Textarea value={info.about} onChange={setI('about')} />
             </Field>
           </div>
 
@@ -89,14 +131,14 @@ export default function BusinessProfile() {
                     className="grow"
                     value={hours[d]}
                     onChange={(e) => setHours((h) => ({ ...h, [d]: e.target.value }))}
-                    list={`hours-${d}`}
+                    placeholder={hours[d] === '' ? 'Closed' : ''}
                   />
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => setHours((h) => ({ ...h, [d]: h[d] === 'Closed' ? DEFAULT_HOURS[d] : 'Closed' }))}
+                    onClick={() => setHours((h) => ({ ...h, [d]: h[d] ? '' : 'Open 24 hours' }))}
                   >
-                    {hours[d] === 'Closed' ? 'Open it' : 'Close'}
+                    {hours[d] ? 'Close' : 'Set'}
                   </button>
                 </div>
               ))}
@@ -116,54 +158,39 @@ export default function BusinessProfile() {
             <Field label="Address" required hint="Used for proximity ranking — customers won't see your full address unless you choose to.">
               <Input value={info.address} onChange={setI('address')} />
             </Field>
-            <Field label="Map pin">
-              <div style={{ height: 150, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface-2)', position: 'relative', overflow: 'hidden' }}>
-                <div className="map-ph" style={{ border: 'none', minHeight: 150 }}>
-                  <div className="map-bg" />
-                  <span className="map-pin" style={{ left: '58%', top: '52%' }}>
-                    <svg viewBox="0 0 24 24" style={{ overflow: 'visible' }}>
-                      <path fill="var(--primary-600)" stroke="#fff" strokeWidth="1.4" d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" fill="#fff" />
-                    </svg>
-                  </span>
-                </div>
-              </div>
-            </Field>
           </div>
 
           <div className="card card-pad">
             <h4 style={{ marginBottom: 14 }}>Gallery</h4>
             <div className="gallery-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-              {gallery.map((g, i) => (
-                <div key={g} style={{ position: 'relative' }}>
-                  <div className="tile" style={{ background: gradientFor(`Bean & Leaf ${g}`), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>
-                    {['☕', '🌿', '🛋️', '🌇', '✨', '🍰'][i]}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-icon"
-                    style={{ position: 'absolute', top: 6, right: 6, width: 28, height: 28, padding: 0, borderRadius: 8, background: 'rgba(32,45,38,.7)', color: '#fff' }}
-                    onClick={() => setGallery((gList) => gList.filter((x) => x !== g))}
-                    aria-label="Remove image"
-                  >
-                    <Icon name="i-x" size={13} />
-                  </button>
+              {(data.gallery || []).map((url, i) => (
+                <div key={i} style={{ position: 'relative' }}>
+                  <img src={url} alt={`Gallery ${i + 1}`} className="tile" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
                 </div>
               ))}
-              <label className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', border: '2px dashed var(--border-strong)', borderRadius: 9, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600, flexDirection: 'column' }}>
+              <label className="tile" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 6, cursor: 'pointer', border: '2px dashed var(--border-strong)', borderRadius: 9, color: 'var(--text-muted)', fontSize: '0.82rem', fontWeight: 600 }}>
                 <Icon name="i-upload" size={20} />
                 Add photo
-                <input type="file" accept="image/*" hidden />
+                <input type="file" accept="image/*" multiple hidden onChange={uploadGallery} />
               </label>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="row" style={{ justifyContent: 'flex-end', marginTop: 20, gap: 10 }}>
-        <Button variant="ghost" onClick={() => toast('Changes discarded')}>Discard</Button>
-        <Button variant="primary" onClick={() => toast('Profile saved')}>Save changes</Button>
+      <div className="row" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
+        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
       </div>
     </div>
   )
+}
+
+export default function BusinessProfile() {
+  const { data, loading, error, refetch } = useApi(() => api.merchant.profile(), [], [])
+
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading profile…" /></div>
+  if (error) return <PageError text="Could not load profile." />
+  if (!data) return null
+
+  return <ProfileBody key={data.id} data={data} onSaved={refetch} />
 }

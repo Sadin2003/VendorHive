@@ -6,26 +6,60 @@ import Avatar from '../../components/ui/Avatar'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import { Field, Textarea } from '../../components/ui/Fields'
+import { PageLoading, PageError } from '../../components/ui/Loading'
+import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
 import { useToast } from '../../components/ui/useToast'
 
-const INITIAL = [
-  { id: 'r1', user: 'Aisha K.', rating: 5, date: '2 days ago', text: 'The oat-latte-cold-drip combo is unreal. Baristas remember my order every single morning.', verified: true, reply: null },
-  { id: 'r2', user: 'Marcus T.', rating: 5, date: '1 week ago', text: 'Cozy spot, great WiFi, and the bundled deal with Sunflower is the best value on the block.', verified: true, reply: 'Appreciate it, Marcus — the bundle is our favorite hangover from the cross-promo.' },
-  { id: 'r3', user: 'Priya N.', rating: 4, date: '3 weeks ago', text: 'Lovely roastery smell when you walk in. Gets busy after 5pm on Thursdays.', verified: false, reply: null },
-  { id: 'r4', user: 'Danny R.', rating: 5, date: '1 month ago', text: 'Staff went out of their way to help me choose a gift bag of beans. Five stars.', verified: true, reply: null },
-]
+const STARS = [5, 4, 3, 2, 1]
 
-const DIST = [
-  { star: 5, pct: 82 }, { star: 4, pct: 12 }, { star: 3, pct: 4 }, { star: 2, pct: 1 }, { star: 1, pct: 1 },
-]
-
-export default function Reviews() {
+function ReviewsBody({ data }) {
   const toast = useToast()
-  const [reviews, setReviews] = useState(INITIAL)
+  const [reviews, setReviews] = useState(data || [])
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
+  const [flagging, setFlagging] = useState(null)
+  const [flagReason, setFlagReason] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  const avg = (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1)
+  const total = reviews.length
+  const avg = total ? (reviews.reduce((a, r) => a + r.rating, 0) / total).toFixed(1) : '0.0'
+  const dist = STARS.map((star) => {
+    const count = reviews.filter((r) => r.rating === star).length
+    return { star, count, pct: total ? Math.round((count / total) * 100) : 0 }
+  })
+
+  const publishReply = async () => {
+    if (!replyText.trim() || !replyingTo) return
+    setBusy(true)
+    try {
+      await api.merchant.replyToReview(replyingTo.id, replyText.trim())
+      setReviews((rs) => rs.map((x) => (x.id === replyingTo.id ? { ...x, reply: replyText.trim() } : x)))
+      setReplyingTo(null)
+      setReplyText('')
+      toast('Reply published')
+    } catch (err) {
+      toast(err.message || 'Could not publish reply')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const submitFlag = async () => {
+    if (!flagging) return
+    setBusy(true)
+    try {
+      await api.merchant.flagReview(flagging.id, flagReason.trim() || 'Reported by merchant')
+      setReviews((rs) => rs.map((x) => (x.id === flagging.id ? { ...x, moderation: 'escalated' } : x)))
+      setFlagging(null)
+      setFlagReason('')
+      toast('Review flagged for admin moderation')
+    } catch (err) {
+      toast(err.message || 'Could not flag review')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div>
@@ -41,11 +75,11 @@ export default function Reviews() {
           <span style={{ fontSize: '3rem', fontWeight: 800, letterSpacing: '-.03em' }}>{avg}</span>
           <div>
             <StarRating value={Number(avg)} size={17} />
-            <div className="tiny muted" style={{ marginTop: 4 }}>{reviews.length} reviews · all time</div>
+            <div className="tiny muted" style={{ marginTop: 4 }}>{total} reviews · all time</div>
           </div>
         </div>
         <div className="card card-pad">
-          {DIST.map((r) => (
+          {dist.map((r) => (
             <div className="row" style={{ gap: 10 }} key={r.star}>
               <span className="tiny muted" style={{ width: 22 }}>{r.star}★</span>
               <div className="progress grow"><i style={{ width: `${r.pct}%` }} /></div>
@@ -56,39 +90,47 @@ export default function Reviews() {
       </div>
 
       <div className="col" style={{ gap: 14 }}>
-        {reviews.map((r) => (
-          <div key={r.id} className="card card-pad">
-            <div className="row-between" style={{ marginBottom: 8 }}>
-              <div className="row">
-                <Avatar text={r.user} size="sm" />
-                <div>
-                  <div className="bold small">{r.user}</div>
-                  <span className="muted tiny">{r.date}</span>
+        {reviews.length === 0 ? (
+          <div className="card"><p className="muted" style={{ margin: 0 }}>No reviews yet.</p></div>
+        ) : (
+          reviews.map((r) => (
+            <div key={r.id} className="card card-pad">
+              <div className="row-between" style={{ marginBottom: 8 }}>
+                <div className="row">
+                  <Avatar text={r.user} size="sm" />
+                  <div>
+                    <div className="bold small">{r.user}</div>
+                    <span className="muted tiny">{r.date}</span>
+                  </div>
+                </div>
+                <div className="row" style={{ gap: 8 }}>
+                  <StarRating value={r.rating} size={13} />
+                  {r.moderation === 'kept' && <Badge tone="green">Verified</Badge>}
+                  {r.moderation === 'escalated' && <Badge tone="amber">Under review</Badge>}
                 </div>
               </div>
+              <p style={{ margin: '0 0 12px' }}>{r.text}</p>
+              {r.reply ? (
+                <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 14px', fontSize: '0.86rem', marginBottom: 8 }}>
+                  <strong style={{ color: 'var(--primary-700)' }}>Your response:</strong>
+                  <p style={{ margin: '4px 0 0' }}>{r.reply}</p>
+                </div>
+              ) : null}
               <div className="row" style={{ gap: 8 }}>
-                <StarRating value={r.rating} size={13} />
-                {r.verified && <Badge tone="green">Verified</Badge>}
+                {!r.reply && (
+                  <Button variant="ghost" size="sm" icon={<Icon name="i-message" size={14} />} onClick={() => { setReplyingTo(r); setReplyText('') }}>
+                    Respond
+                  </Button>
+                )}
+                {r.moderation !== 'escalated' && (
+                  <Button variant="ghost" size="sm" icon={<Icon name="i-flag" size={14} />} onClick={() => { setFlagging(r); setFlagReason('') }}>
+                    Flag
+                  </Button>
+                )}
               </div>
             </div>
-            <p style={{ margin: '0 0 12px' }}>{r.text}</p>
-            {r.reply ? (
-              <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 14px', fontSize: '0.86rem' }}>
-                <strong style={{ color: 'var(--primary-700)' }}>Your response:</strong>
-                <p style={{ margin: '4px 0 0' }}>{r.reply}</p>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<Icon name="i-message" size={14} />}
-                onClick={() => { setReplyingTo(r); setReplyText('') }}
-              >
-                Respond
-              </Button>
-            )}
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       <Modal open={!!replyingTo} onClose={() => setReplyingTo(null)} title={`Reply to ${replyingTo?.user}`}>
@@ -104,18 +146,35 @@ export default function Reviews() {
         </Field>
         <div className="row" style={{ justifyContent: 'flex-end', gap: 10 }}>
           <Button variant="ghost" onClick={() => setReplyingTo(null)}>Cancel</Button>
-          <Button
-            onClick={() => {
-              setReviews((rs) => rs.map((x) => (x.id === replyingTo.id ? { ...x, reply: replyText } : x)))
-              setReplyingTo(null)
-              toast('Reply published')
-            }}
-            disabled={!replyText.trim()}
-          >
+          <Button disabled={!replyText.trim() || busy} onClick={publishReply}>
             <Icon name="i-send" size={14} /> Publish reply
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal open={!!flagging} onClose={() => setFlagging(null)} title="Flag this review">
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Flagged reviews go to our admin team for review. Why are you reporting this one?
+        </p>
+        <Field label="Reason">
+          <Textarea placeholder="e.g. Off-topic, abusive, or factually wrong…" value={flagReason} onChange={(e) => setFlagReason(e.target.value)} />
+        </Field>
+        <div className="row" style={{ justifyContent: 'flex-end', gap: 10 }}>
+          <Button variant="ghost" onClick={() => setFlagging(null)}>Cancel</Button>
+          <Button disabled={busy} onClick={submitFlag}>
+            <Icon name="i-flag" size={14} /> Flag for review
           </Button>
         </div>
       </Modal>
     </div>
   )
+}
+
+export default function Reviews() {
+  const { data, loading, error } = useApi(() => api.merchant.reviews(), [], [])
+
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading reviews…" /></div>
+  if (error) return <PageError text="Could not load reviews." />
+
+  return <ReviewsBody data={data || []} />
 }

@@ -1,54 +1,47 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Icon from '../../components/ui/Icon'
 import Button from '../../components/ui/Button'
 import Badge from '../../components/ui/Badge'
 import StarRating from '../../components/ui/StarRating'
 import SearchInput from '../../components/ui/SearchInput'
 import { gradientFor } from '../../utils/gradients'
-import { useToast } from '../../components/ui/useToast'
+import { PageLoading, PageError } from '../../components/ui/Loading'
 import { api } from '../../services/api'
+import { useApi } from '../../utils/useApi'
+import { useToast } from '../../components/ui/useToast'
 
 export default function BusinessManagement() {
-  const [biz, setBiz] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [busyId, setBusyId] = useState(null)
   const [q, setQ] = useState('')
+  const [busyId, setBusyId] = useState(null)
   const toast = useToast()
+  const { data, loading, error, refetch } = useApi(() => api.admin.merchants(), [], [])
+  const biz = data || []
 
-  useEffect(() => {
-    let active = true
-    api.admin
-      .businesses()
-      .then((res) => { if (active) setBiz(res.data || []) })
-      .catch((e) => { if (active) setError(e.message) })
-      .finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [])
+  const list = biz.filter((b) => !q.trim() || `${b.name} ${b.owner}`.toLowerCase().includes(q.trim().toLowerCase()))
+  const live = biz.filter((b) => b.status === 'live').length
 
-  const list = biz.filter((b) => !q.trim() || b.name.toLowerCase().includes(q.trim().toLowerCase()))
-  const live = biz.filter((b) => b.status !== 'delisted').length
+  const badgeFor = (b) => {
+    if (b.status === 'live' || b.status === 'reviewed') return b.verified ? ['green', 'verified'] : ['gray', 'reviewed']
+    if (b.status === 'pending') return ['amber', 'pending']
+    return ['red', b.status]
+  }
 
   const delist = async (b) => {
     const next = b.status === 'delisted' ? 'live' : 'delisted'
     setBusyId(b.id)
     try {
-      await api.admin.businessStatus(b.id, next)
-      setBiz((bs) => bs.map((x) => (x.id === b.id ? { ...x, status: next } : x)))
+      await api.admin.merchantStatus(b.id, next)
       toast(next === 'delisted' ? `${b.name} delisted` : `${b.name} restored`)
-    } catch (e) {
-      toast(e.message || 'Action failed')
+      refetch()
+    } catch (err) {
+      toast(err.message || 'Could not update listing')
     } finally {
       setBusyId(null)
     }
   }
 
-  if (loading) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48 }}>Loading businesses…</div>
-  }
-  if (error) {
-    return <div className="card card-pad" style={{ textAlign: 'center', paddingBlock: 48, color: 'var(--danger-2)' }}>Failed to load: {error}</div>
-  }
+  if (loading) return <div className="card card-pad"><PageLoading text="Loading businesses…" /></div>
+  if (error) return <PageError text="Could not load businesses." />
 
   return (
     <div>
@@ -57,56 +50,66 @@ export default function BusinessManagement() {
           <h1 style={{ fontSize: '1.6rem' }}>Business management</h1>
           <p>{live} active listings · {biz.length} total</p>
         </div>
-        <Button variant="outline"><Icon name="i-filter" size={15} /> Filter</Button>
       </div>
 
-      <SearchInput className="grow" style={{ marginBottom: 18 }} value={q} onChange={setQ} placeholder="Search businesses…" />
+      <SearchInput className="grow" style={{ marginBottom: 18 }} value={q} onChange={setQ} placeholder="Search businesses or owners…" />
 
-      <div className="table-wrap">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Business</th>
-              <th>Status</th>
-              <th>Rating</th>
-              <th>Reports</th>
-              <th>Owner</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((b) => (
-              <tr key={b.id}>
-                <td>
-                  <div className="cell-head">
-                    <span className="logo-badge" style={{ background: gradientFor(b.name), width: 34, height: 34, borderRadius: 9, fontSize: '0.7rem' }}>{b.name.slice(0, 2)}</span>
-                    <div>
-                      <div className="c-name">{b.name}</div>
-                      <div className="c-sub">{b.cat}</div>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <Badge tone={b.verified ? 'green' : b.status === 'pending' ? 'amber' : 'red'}>
-                    {b.verified ? 'verified' : b.status === 'pending' ? 'pending' : b.status}
-                  </Badge>
-                </td>
-                <td>{b.rating ? <StarRating value={b.rating} size={13} /> : '—'}</td>
-                <td>{b.reports > 0 ? <Badge tone="red">{b.reports}</Badge> : <span className="muted">0</span>}</td>
-                <td><span className="small">{b.owner}</span></td>
-                <td>
-                  <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
-                    <Button to={`/vendors/${b.id}`} variant="ghost" className="btn-icon" title="View public profile"><Icon name="i-eye" size={15} /></Button>
-                    <Button variant="ghost" className="btn-icon" title={b.status === 'delisted' ? 'Restore listing' : 'Delist'} disabled={busyId === b.id} onClick={() => delist(b)}>
-                      <Icon name="i-flag" size={15} style={{ color: b.status === 'delisted' ? 'var(--primary)' : 'var(--danger)' }} />
-                    </Button>
-                  </div>
-                </td>
+      {list.length === 0 ? (
+        <div className="card"><p className="muted small" style={{ margin: 0 }}>No businesses match this search.</p></div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Business</th>
+                <th>Status</th>
+                <th>Rating</th>
+                <th>Reports</th>
+                <th>Owner</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map((b) => {
+                const [tone, label] = badgeFor(b)
+                return (
+                  <tr key={b.id}>
+                    <td>
+                      <div className="cell-head">
+                        <span className="logo-badge" style={{ background: gradientFor(b.name), width: 34, height: 34, borderRadius: 9, fontSize: '0.7rem' }}>{b.name.slice(0, 2)}</span>
+                        <div>
+                          <div className="c-name">{b.name}</div>
+                          <div className="c-sub">{b.cat}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td><Badge tone={tone}>{label}</Badge></td>
+                    <td>{b.rating ? <StarRating value={b.rating} size={13} /> : '—'}</td>
+                    <td>{b.reports > 0 ? <Badge tone="red">{b.reports}</Badge> : <span className="muted">0</span>}</td>
+                    <td><span className="small">{b.owner}</span></td>
+                    <td>
+                      <div className="row-actions" style={{ justifyContent: 'flex-end' }}>
+                        {b.status === 'live' && (
+                          <Button to={`/businesses/${b.id}`} variant="ghost" className="btn-icon" title="View public profile"><Icon name="i-eye" size={15} /></Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          className="btn-icon"
+                          disabled={busyId === b.id}
+                          title={b.status === 'delisted' ? 'Restore listing' : 'Delist'}
+                          onClick={() => delist(b)}
+                        >
+                          <Icon name="i-flag" size={15} style={{ color: b.status === 'delisted' ? 'var(--primary)' : 'var(--danger)' }} />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

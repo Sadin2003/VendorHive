@@ -13,6 +13,8 @@ import NotFound from '../pages/public/NotFound'
 
 import Login from '../pages/auth/Login'
 import Register from '../pages/auth/Register'
+import ForgotPassword from '../pages/auth/ForgotPassword'
+import ResetPassword from '../pages/auth/ResetPassword'
 
 import CustomerLayout from '../pages/customer/CustomerLayout'
 import CustomerDashboard from '../pages/customer/Dashboard'
@@ -62,6 +64,8 @@ export const router = createBrowserRouter([
 
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
+  { path: '/forgot-password', element: <ForgotPassword /> },
+  { path: '/reset-password', element: <ResetPassword /> },
 
   {
     element: (

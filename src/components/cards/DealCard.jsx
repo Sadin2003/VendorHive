@@ -1,15 +1,12 @@
 import { Link } from 'react-router-dom'
-import { useState } from 'react'
 import Icon from '../ui/Icon'
 import { gradientFor } from '../../utils/gradients'
 
 export default function DealCard({ deal, saved = false, onSave }) {
-  const [isSaved, setIsSaved] = useState(saved)
   const handleSave = (e) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsSaved((s) => !s)
-    onSave?.(deal, !isSaved)
+    onSave?.(deal, !saved)
   }
 
   return (
@@ -20,14 +17,16 @@ export default function DealCard({ deal, saved = false, onSave }) {
         style={{ background: gradientFor(deal.merchant || deal.coverKey || deal.id) }}
       >
         {deal.tag && <span className="deal-tag">{deal.tag}</span>}
-        <button
-          type="button"
-          className={`deal-save ${isSaved ? 'saved' : ''}`}
-          onClick={handleSave}
-          aria-label={isSaved ? 'Remove from saved' : 'Save deal'}
-        >
-          <Icon name={isSaved ? 'i-bookmark' : 'i-bookmark-o'} />
-        </button>
+        {onSave && (
+          <button
+            type="button"
+            className={`deal-save ${saved ? 'saved' : ''}`}
+            onClick={handleSave}
+            aria-label={saved ? 'Remove from saved' : 'Save deal'}
+          >
+            <Icon name={saved ? 'i-bookmark' : 'i-bookmark-o'} />
+          </button>
+        )}
       </Link>
       <div className="deal-body">
         <div className="merchant">
