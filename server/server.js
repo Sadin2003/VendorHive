@@ -10,6 +10,7 @@ import merchantRoutes from './routes/merchantRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import { notFound, errorHandler } from './middlewares/error.js'
 import { serveUploads } from './middlewares/upload.js'
+import carbonFootprint from './middlewares/carbonFootprint.js'
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -22,6 +23,9 @@ app.use(
 )
 app.use(express.json())
 app.use(cookieParser())
+
+// Track carbon footprint for every API request
+app.use(carbonFootprint)
 
 app.get('/api/health', (req, res) => res.json({ success: true, message: 'VendorHive API running' }))
 
